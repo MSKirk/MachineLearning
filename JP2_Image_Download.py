@@ -285,9 +285,9 @@ class Jp2ImageDownload:
                 ar_list = [elem for elem in ar if elem['event_starttime'] == time_in]
                 ss_list = [elem for elem in ss if elem['event_starttime'] == time_in]
 
-                ch_mask, _ = self.gen_feature_mask(time_in, ch_list, nearest_file)
-                ar_mask, _ = self.gen_feature_mask(time_in, ar_list, nearest_file)
-                ss_mask, _ = self.gen_feature_mask(time_in, ss_list, nearest_file)
+                ch_mask, _ = self.gen_label_mask(time_in, ch_list, nearest_file)
+                ar_mask, _ = self.gen_label_mask(time_in, ar_list, nearest_file)
+                ss_mask, _ = self.gen_label_mask(time_in, ss_list, nearest_file)
 
 
 
@@ -297,7 +297,7 @@ class Jp2ImageDownload:
 
 
 
-    def gen_feature_mask(self, label_time, label_list, image_filepath):
+    def gen_label_mask(self, label_time, label_list, image_filepath):
         """
         Create a binary mask of feature locations. If there is no feature, an empty mask is returned
 
@@ -318,9 +318,9 @@ class Jp2ImageDownload:
         # parsing boundary coordinate string for each feature
         # Even if there is no feature, an empty mask is returned
         # This is ok but need to be classified as
-        for feature in label_list:
+        for labels in label_list:
 
-            p1 = feature["hpc_boundcc"][9:-2]
+            p1 = labels["hpc_boundcc"][9:-2]
             p2 = p1.split(',')
             p3 = [v.split(" ") for v in p2]
 
