@@ -57,29 +57,45 @@ class Jp2ImageDownload:
             self.get_feature_images(self.date_string_list[ii + 1], self.date_string_list[ii], save_path)
 
 
-    def get_all_sdo_images(self, time_in, save_path=''):
+    def download_sdo_images(self, time_in, measurements, dt=None, save_path=''):
         """
-        Download a complete set of the SDO images in AIA and HMI for a given time
+        Download a complete set of the SDO images in AIA and HMI for a given time, with optional tolerance on time difference
 
-        :param time_in: string time for JP2 image download
+        :param time_in: requested datetime for JP2 image download.
+        :param measurements: list of string of measurement names: AIA wavelength: '193', '94',... or HMI segment name: 'continuum' or 'magnetogram'
+        :param dt: time difference tolerated between requested time and available image time so that time_in - dt < actual image time < time_in + dt
         :param save_path: save path for downloaded images
-        :return: full file path of example AIA image downloaded (335 channel)
+        :return: full file path of example AIA image downloaded (335 channel). Set to None if time is off limits
         """
 
         hv = helioviewer.HelioviewerClient()
 
-        wavelnths = ['1600', '1700', '094', '131', '171', '211', '304', '335', '193']
-        measurement = ['continuum', 'magnetogram']
+        filepaths = []
+        image_times = []
+        for measure in measurements:
+            if measure is not 'continuum' and measure is not 'magnetogram':
+                kwargs = {'observatory': 'SDO', 'instrument': 'AIA', 'detector': 'AIA', 'measurement': measure}
+            else:
+                kwargs = {'observatory': 'SDO', 'instrument': 'HMI', 'detector': 'HMI', 'measurement': measure}
 
-        for wav in wavelnths:
-            aia_filepath = hv.download_jp2(time_in, observatory='SDO', instrument='AIA', detector='AIA', measurement=wav,
-                                       directory=save_path, overwrite=True)
+            if dt is not None:
+                # Check how far requested time in metadata is from requested hek time
+                metadata = hv.get_closest_image(time_in, **kwargs)
+                image_time = metadata['date']
+                if time_in - dt < image_time < time_in + dt:
+                    filepath = hv.download_jp2(time_in, directory=save_path, **kwargs)
+                else:
+                    # Do not download if actual image time is too far from requested time
+                    filepath = None
+            else:
+                image_time = None
+                filepath = hv.download_jp2(time_in, directory=save_path, **kwargs)
 
-        for measure in measurement:
-            hmi_filepath = hv.download_jp2(time_in, observatory='SDO', instrument='HMI', detector='HMI',
-                                       measurement=measure, directory=save_path, overwrite=True)
+            filepaths.append(filepath)
+            image_times.append(image_time)
 
-        return aia_filepath
+        return filepaths, image_times
+
 
     def get_feature_images(self, time_start, time_end, save_dir):
         """
