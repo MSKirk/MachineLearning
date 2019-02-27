@@ -17,71 +17,7 @@ import os, glob, shutil
 from mahotas.polygon import fill_polygon
 
 
-def datetime_from_filename(filepath):
-    basename = os.path.basename(filepath)[0:20]
-    file_time_str= basename[:4] + '-' + basename[5:7] + '-' + basename[8:10] + 'T' + basename[12:14] + ':' + basename[15:17] \
-               + ':' + basename[18:20]
-    file_datetime = parse_time(file_time_str)
-    return file_datetime
 
-
-def get_hek_result(time_start, time_end):
-    client = hek.HEKClient()
-    result = client.search(hek.attrs.Time(time_start, time_end), hek.attrs.FRM.Name == 'SPoCA')  # CH and AR
-    result += client.search(hek.attrs.Time(time_start, time_end), hek.attrs.FRM.Name == 'EGSO_SFC')  # SS
-    times = list(set([elem["event_starttime"] for elem in result]))
-    times.sort()
-    return result, times
-
-
-def download_sdo_images(time_in, measurements, dt, save_path=''):
-    """
-    Download a complete set of the SDO images in AIA and HMI for a given time, with optional tolerance on time difference
-
-    :param time_in: requested datetime for JP2 image download.
-    :param measurements: list of string of measurement names: AIA wavelength: '193', '94',... or HMI segment name: 'continuum' or 'magnetogram'
-    :param dt: time difference tolerated between requested time and available image time so that time_in - dt < actual image time < time_in + dt
-    :param save_path: save path for downloaded images
-    :return: full file path of example AIA image downloaded (335 channel). Set to None if time is off limits
-    """
-
-    hv = helioviewer.HelioviewerClient()
-
-    filepaths = []
-    image_times = []
-    for measure in measurements:
-        if measure is not 'continuum' and measure is not 'magnetogram':
-            kwargs = {'observatory': 'SDO', 'instrument': 'AIA', 'detector': 'AIA', 'measurement': measure}
-        else:
-            kwargs = {'observatory': 'SDO', 'instrument': 'HMI', 'detector': 'HMI', 'measurement': measure}
-
-        if dt is not None:
-            # Check how far requested time in metadata is from requested hek time
-            metadata = hv.get_closest_image(time_in, **kwargs)
-            image_time = metadata['date']
-            if time_in - dt < image_time < time_in + dt:
-                filepath = hv.download_jp2(time_in, directory=save_path, **kwargs)
-            else:
-                # Do not download if actual image time is too far from requested time
-                filepath = None
-        else:
-            image_time = None
-            filepath = hv.download_jp2(time_in, directory=save_path, **kwargs)
-
-        filepaths.append(filepath)
-        image_times.append(image_time)
-
-    return filepaths, image_times
-
-
-def mahotas_fill_polygon(verts_yx, mask_shape):
-    mahotas_poly_mask = np.zeros(mask_shape, dtype=np.int)
-    fill_polygon(verts_yx, mahotas_poly_mask)
-    return mahotas_poly_mask
-
-
-def nearest(items, pivot):
-    return min(items, key=lambda x: abs(x - pivot))
 
 
 class Jp2ImageDownload:
@@ -291,9 +227,9 @@ class Jp2ImageDownload:
 
 
 
-                # self.write_feature_mask(ch_mask, time_in, 'CH', save_path=save_dir)
-                # self.write_feature_mask(ar_mask, time_in, 'AR', save_path=save_dir)
-                # self.write_feature_mask(ss_mask, time_in, 'SS', save_path=save_dir)
+                # self.write_mask(ch_mask, time_in, 'CH', save_path=save_dir)
+                # self.write_mask(ar_mask, time_in, 'AR', save_path=save_dir)
+                # self.write_mask(ss_mask, time_in, 'SS', save_path=save_dir)
 
 
 
@@ -324,14 +260,14 @@ class Jp2ImageDownload:
             p2 = p1.split(',')
             p3 = [v.split(" ") for v in p2]
 
-            feature_date = parse_time(label_time)
+            label_date = parse_time(label_time)
 
-            feature_boundary = SkyCoord([(float(v[0]), float(v[1])) * u.arcsec for v in p3], obstime=feature_date,
+            label_boundary = SkyCoord([(float(v[0]), float(v[1])) * u.arcsec for v in p3], obstime=label_date,
                                         frame=frames.Helioprojective)
 
             # Vertices  of feature
             # R: This can contain NaN. The output of SkyCoord needs to be sanitized
-            pixel_vertex = feature_boundary.to_pixel(aia_wcs)
+            pixel_vertex = label_boundary.to_pixel(aia_wcs)
             verts_x = np.array([x for x in pixel_vertex[0] if not np.isnan(x)])
             verts_y = np.array([y for y in pixel_vertex[1] if not np.isnan(y)])
             verts_yx = np.round(np.array((verts_y, verts_x)).T).astype(np.int)
@@ -344,62 +280,130 @@ class Jp2ImageDownload:
         return mask, verts_yx_list
 
 
-    def write_feature_mask(self, mask_in, feature_time, feature_type='Mask', save_path=''):
-        """
-        Save the feature mask as an image
-
-        :param mask_in: Mask of feature as np array
-        :param feature_time: time of the feature detection as DateTime
-        :param feature_type: String of feature type e.g. "SS", "CH", or "AR"
-        :param save_path: save path for saving mask as image
-        :return: none
-        """
-
-        feature_date = parse_time(feature_time)
-
-        feature_mask_name = feature_date.strftime("%Y_%m_%d__%H_%M_%S")+'__'+feature_type+'_mask.jp2'
-        save_mask_name = os.path.join(save_path, feature_mask_name)
-
-        imwrite(save_mask_name, mask_in.astype('uint8'))
-
-    def get_header(self, filepath):
-        """
-        Reads the header from the file and sanitizes it to Fits standards.
-
-        Parameters
-        ----------
-        filepath : `str`
-            The file to be read
-
-        Returns
-        -------
-        headers : list
-            A list of headers read from the file
-        """
-
-        sunpyhead = read_file_header(filepath)
-
-        for subhead in sunpyhead:
-            # Remove newlines from comment and history
-            if 'comment' in subhead:
-                subhead['comment'] = subhead['comment'].replace("\n", "")
-            if 'history' in subhead:
-                subhead['history'] = subhead['history'].replace("\n", "")
-    
-            badkeys = []
-    
-            # dumps header keywords that are NaN
-            for key, value in subhead.items():
-                if type(value) in (int, float):
-                    if np.isnan(value):
-                        badkeys += [key]
-    
-            for key in badkeys:
-                subhead.pop(key, None)
-
-        return sunpyhead
 
 
 
+def datetime_from_filename(filepath):
+    basename = os.path.basename(filepath)[0:20]
+    file_time_str= basename[:4] + '-' + basename[5:7] + '-' + basename[8:10] + 'T' + basename[12:14] + ':' + basename[15:17] \
+               + ':' + basename[18:20]
+    file_datetime = parse_time(file_time_str)
+    return file_datetime
+
+
+def get_hek_result(time_start, time_end):
+    client = hek.HEKClient()
+    result = client.search(hek.attrs.Time(time_start, time_end), hek.attrs.FRM.Name == 'SPoCA')  # CH and AR
+    result += client.search(hek.attrs.Time(time_start, time_end), hek.attrs.FRM.Name == 'EGSO_SFC')  # SS
+    times = list(set([elem["event_starttime"] for elem in result]))
+    times.sort()
+    return result, times
+
+
+def download_sdo_images(time_in, measurements, dt, save_path=''):
+    """
+    Download a complete set of the SDO images in AIA and HMI for a given time, with optional tolerance on time difference
+
+    :param time_in: requested datetime for JP2 image download.
+    :param measurements: list of string of measurement names: AIA wavelength: '193', '94',... or HMI segment name: 'continuum' or 'magnetogram'
+    :param dt: time difference tolerated between requested time and available image time so that time_in - dt < actual image time < time_in + dt
+    :param save_path: save path for downloaded images
+    :return: full file path of example AIA image downloaded (335 channel). Set to None if time is off limits
+    """
+
+    hv = helioviewer.HelioviewerClient()
+
+    filepaths = []
+    image_times = []
+    for measure in measurements:
+        if measure is not 'continuum' and measure is not 'magnetogram':
+            kwargs = {'observatory': 'SDO', 'instrument': 'AIA', 'detector': 'AIA', 'measurement': measure}
+        else:
+            kwargs = {'observatory': 'SDO', 'instrument': 'HMI', 'detector': 'HMI', 'measurement': measure}
+
+        if dt is not None:
+            # Check how far requested time in metadata is from requested hek time
+            metadata = hv.get_closest_image(time_in, **kwargs)
+            image_time = metadata['date']
+            if time_in - dt < image_time < time_in + dt:
+                filepath = hv.download_jp2(time_in, directory=save_path, **kwargs)
+            else:
+                # Do not download if actual image time is too far from requested time
+                filepath = None
+        else:
+            image_time = None
+            filepath = hv.download_jp2(time_in, directory=save_path, **kwargs)
+
+        filepaths.append(filepath)
+        image_times.append(image_time)
+
+    return filepaths, image_times
+
+
+def get_header(filepath):
+    """
+    Reads the header from the file and sanitizes it to Fits standards.
+
+    Parameters
+    ----------
+    filepath : `str`
+        The file to be read
+
+    Returns
+    -------
+    headers : list
+        A list of headers read from the file
+    """
+
+    sunpyhead = read_file_header(filepath)
+
+    for subhead in sunpyhead:
+        # Remove newlines from comment and history
+        if 'comment' in subhead:
+            subhead['comment'] = subhead['comment'].replace("\n", "")
+        if 'history' in subhead:
+            subhead['history'] = subhead['history'].replace("\n", "")
+
+        badkeys = []
+
+        # dumps header keywords that are NaN
+        for key, value in subhead.items():
+            if type(value) in (int, float):
+                if np.isnan(value):
+                    badkeys += [key]
+
+        for key in badkeys:
+            subhead.pop(key, None)
+
+    return sunpyhead
+
+
+def mahotas_fill_polygon(verts_yx, mask_shape):
+    mahotas_poly_mask = np.zeros(mask_shape, dtype=np.int)
+    fill_polygon(verts_yx, mahotas_poly_mask)
+    return mahotas_poly_mask
+
+
+def nearest(items, pivot):
+    return min(items, key=lambda x: abs(x - pivot))
+
+
+def write_mask(mask_in, label_time, label='Mask', save_path=''):
+    """
+    Save the feature mask as an image
+
+    :param mask_in: Mask of feature as np array
+    :param label_time: time of the label detection as DateTime
+    :param label: String of feature type e.g. "SS", "CH", or "AR"
+    :param save_path: save path for saving mask as image
+    :return: none
+    """
+
+    label_date = parse_time(label_time)
+
+    label_mask_name = label_date.strftime("%Y_%m_%d__%H_%M_%S")+'__'+label+'_mask.jp2'
+    save_mask_name = os.path.join(save_path, label_mask_name)
+
+    imwrite(save_mask_name, mask_in.astype('uint8'))
 
 
