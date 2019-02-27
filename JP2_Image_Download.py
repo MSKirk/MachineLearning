@@ -289,9 +289,11 @@ class Jp2ImageDownload:
                 ar_mask, _ = self.gen_feature_mask(time_in, ar_list, nearest_file)
                 ss_mask, _ = self.gen_feature_mask(time_in, ss_list, nearest_file)
 
-                self.write_feature_mask(ch_mask, time_in, 'CH', save_path=save_dir)
-                self.write_feature_mask(ar_mask, time_in, 'AR', save_path=save_dir)
-                self.write_feature_mask(ss_mask, time_in, 'SS', save_path=save_dir)
+
+
+                # self.write_feature_mask(ch_mask, time_in, 'CH', save_path=save_dir)
+                # self.write_feature_mask(ar_mask, time_in, 'AR', save_path=save_dir)
+                # self.write_feature_mask(ss_mask, time_in, 'SS', save_path=save_dir)
 
 
 
