@@ -2,10 +2,11 @@ from sunpy.net import hek, helioviewer
 from sunpy.time import parse_time
 from sunpy.coordinates import frames
 from sunpy.io import read_file_header
+from sunpy.map import Map
 
 import astropy.units as u
 from astropy.coordinates import SkyCoord
-from astropy.wcs import WCS
+#from astropy.wcs import WCS
 
 import numpy as np
 
@@ -131,25 +132,25 @@ class Jp2ImageDownload:
         :return: binary mask of feature
         """
 
-        aia_wcs = WCS(self.get_header(image_filepath)[0])
+        #aia_wcs = WCS(self.get_header(image_filepath)[0])
+        aia_map = Map(image_filepath)
 
         mask = np.zeros([4096,4096])
 
-        if aia_wcs.array_shape != mask.shape:
-            raise ValueError('Mask and WCS array shapes do not agree.')
+        #if aia_wcs.array_shape != mask.shape:
+        #    raise ValueError('Mask and WCS array shapes do not agree.')
 
         # parsing boundary coordinate string for each feature
         for feature in feature_list:
             p1 = feature["hpc_boundcc"][9:-2]
             p2 = p1.split(',')
             p3 = [v.split(" ") for v in p2]
-            feature_date = parse_time(feature_time)
+            #feature_date = parse_time(feature_time)
 
-            feature_boundary = SkyCoord([(float(v[0]), float(v[1])) * u.arcsec for v in p3], obstime=feature_date,
-                                        frame=frames.Helioprojective)
+            feature_boundary = SkyCoord([(float(v[0]), float(v[1])) * u.arcsec for v in p3], frame=aia_map.coordinate_frame)
 
             # Vertices  of feature
-            pixel_vertex = feature_boundary.to_pixel(aia_wcs)
+            pixel_vertex = aia_map.world_to_pixel(feature_boundary)
             mask[np.round(pixel_vertex[0]).astype('int'), np.round(pixel_vertex[1]).astype('int')] = True
 
             # Need to add in contours between vertices
