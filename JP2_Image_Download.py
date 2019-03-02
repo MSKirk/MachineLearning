@@ -1,7 +1,11 @@
+import matplotlib
+matplotlib.use('agg')
+import matplotlib.pyplot as plt
 from sunpy.net import hek, helioviewer
 from sunpy.time import parse_time
 from sunpy.coordinates import frames
 from sunpy.io import read_file_header
+from sunpy.map import Map
 
 import astropy.units as u
 from astropy.coordinates import SkyCoord
@@ -160,7 +164,6 @@ class Jp2ImageDownload:
 
         :param times: list of all hek times
         :param save_path: directory where the jpeg2000 files were downloaded
-        :return:
         """
 
         # List the downloaded images
@@ -184,24 +187,24 @@ class Jp2ImageDownload:
                     shutil.move(downloaded_files[f], reject_dir)
 
 
-    def make_labels(self, save_dir):
+    def make_labels(self):
         """
-        Download jp2 SDO images and create feature masks for a given time period
-
-        :param save_dir: directory where label-masks are saved
-        :return:
+        Create feature masks from the downloaded images for the start and end time defined for self. Save them to disk
+        in the subdirectory 'label_masks' under the image directory.
         """
 
         for ii, download_date in enumerate(self.date_list):
+            print('Making label-masks at date: {:s}'.format(download_date.strftime(self.data_subdir_format)))
             subdir = download_date.strftime(self.data_subdir_format)
-            save_path = os.path.join(self.parent_dir, subdir)
-            os.makedirs(save_path, exist_ok=True)
+            image_dir = os.path.join(self.parent_dir, subdir)
+            label_save_path = os.path.join(self.parent_dir, subdir, 'label_masks')
+            os.makedirs(label_save_path, exist_ok=True)
             # First download the images. Feature extraction will be done separately
             tstart = download_date
             tend = tstart + timedelta(days=1)
 
             # Get a list of existing files (if any)
-            jp2f = sorted(glob.glob(os.path.join(save_path, '*.jp2')))
+            jp2f = sorted(glob.glob(os.path.join(image_dir, '*.jp2')))
             # Parse filenames to get the actual image time
             jp2_datetimes = [datetime_from_filename(filename) for filename in jp2f]
 
@@ -212,72 +215,89 @@ class Jp2ImageDownload:
             ss = [elem for elem in result if elem['event_type'] == 'SS']
 
             for i, time_in in enumerate(times):
-                #image_file = self.get_all_sdo_images(time_in, save_path=save_dir)
+                hek_time = parse_time(time_in)
                 # Get closest image
-                nearest_datetime = nearest(jp2_datetimes, parse_time(time_in))
+                nearest_datetime = nearest(jp2_datetimes, hek_time)
                 nearest_file = jp2f[jp2_datetimes.index(nearest_datetime)]
+                print('...processing hek time: {:s} at index {:d} '.format(hek_time.strftime('%Y/%m/%d %H:%M:%S'), i))
+                print('......using nearest image at time: {:s}'.format(nearest_datetime.strftime('%Y/%m/%d %H:%M:%S')))
 
                 ch_list = [elem for elem in ch if elem['event_starttime'] == time_in]
                 ar_list = [elem for elem in ar if elem['event_starttime'] == time_in]
                 ss_list = [elem for elem in ss if elem['event_starttime'] == time_in]
 
-                ch_mask, _ = self.gen_label_mask(time_in, ch_list, nearest_file)
-                ar_mask, _ = self.gen_label_mask(time_in, ar_list, nearest_file)
-                ss_mask, _ = self.gen_label_mask(time_in, ss_list, nearest_file)
+                print('.........processing CH')
+                ch_mask, _ = gen_label_mask(ch_list, nearest_file, hek_time, 'CH', save_path=label_save_path, do_plot=True)
+                print('.........processing AR')
+                ar_mask, _ = gen_label_mask(ar_list, nearest_file, hek_time, 'AR', save_path=label_save_path, do_plot=True)
+                print('.........processing SS')
+                ss_mask, _ = gen_label_mask(ss_list, nearest_file, hek_time, 'SS', save_path=label_save_path, do_plot=True)
 
 
+def gen_label_mask(label_list, image_filepath, hek_time, label, save_path=None, do_plot=False):
+    """
+    Create a binary mask of feature locations. If there is no feature, an empty mask is returned
 
-                # self.write_mask(ch_mask, time_in, 'CH', save_path=save_dir)
-                # self.write_mask(ar_mask, time_in, 'AR', save_path=save_dir)
-                # self.write_mask(ss_mask, time_in, 'SS', save_path=save_dir)
+    :param label_list: List of HEK dictionaries
+    :param image_filepath: file path of image in which the feature is detected
+    :param hek_time: Datetime used to write the filenames of the mask files
+    :param save_path: directory of the mask files and optionally the figures.
+    :param do_plot: True will plot figures and save them to save_path
+    :return: binary mask of feature and list of polygon vertices tuples.
+    """
 
 
+    jp2_header = get_header(image_filepath)[0]
+    aia_wcs = WCS(jp2_header)
+    mask_shape = [4096, 4096]
+    mask = np.zeros(mask_shape, dtype=np.int)
+    verts_yx_list = []
+    dummy_array = np.empty(mask_shape, dtype=np.int)
 
-    def gen_label_mask(self, label_time, label_list, image_filepath):
-        """
-        Create a binary mask of feature locations. If there is no feature, an empty mask is returned
+    if aia_wcs.array_shape != mask.shape:
+        raise ValueError('Mask and WCS array shapes do not agree.')
 
-        :param label_time: Time string of the pattern detection
-        :param label_list: List of HEK dictionaries
-        :param image_filepath: file path of image in which the feature is detected
-        :return: binary mask of feature
-        """
+    aia_map = Map(dummy_array, aia_wcs)
 
-        aia_wcs = WCS(self.get_header(image_filepath)[0])
+    if do_plot:
+        fig = plt.figure()
+        ax = plt.subplot(projection=aia_map)
+        aia_map.plot(axes=ax)
+    # parsing boundary coordinate string for each feature
+    for labels in label_list:
 
-        mask = np.zeros([4096,4096])
-        verts_yx_list = []
+        p1 = labels["hpc_boundcc"][9:-2]
+        p2 = p1.split(',')
+        p3 = [v.split(" ") for v in p2]
+        print(labels["hpc_boundcc"])
+        print(p3)
 
-        if aia_wcs.array_shape != mask.shape:
-            raise ValueError('Mask and WCS array shapes do not agree.')
 
-        # parsing boundary coordinate string for each feature
-        # Even if there is no feature, an empty mask is returned
-        # This is ok but need to be classified as
-        for labels in label_list:
+        boundary_coords = SkyCoord([(float(v[0]), float(v[1])) * u.arcsec for v in p3], frame=aia_map.coordinate_frame)
 
-            p1 = labels["hpc_boundcc"][9:-2]
-            p2 = p1.split(',')
-            p3 = [v.split(" ") for v in p2]
+        # Vertices  of feature
+        # R: This can contain NaN. The output of SkyCoord needs to be sanitized
+        pixel_verts = aia_map.world_to_pixel(boundary_coords)
+        print(pixel_verts)
+        verts_x = np.array([x for x in pixel_verts[0].value if not np.isnan(x)])
+        verts_y = np.array([y for y in pixel_verts[1].value if not np.isnan(y)])
+        verts_yx = np.round(np.array((verts_y, verts_x)).T).astype(np.int)
+        verts_yx_list.append(verts_yx)
+        fill_polygon(verts_yx, mask)
 
-            label_date = parse_time(label_time)
+        write_mask(mask, hek_time, label, save_path=save_path)
 
-            label_boundary = SkyCoord([(float(v[0]), float(v[1])) * u.arcsec for v in p3], obstime=label_date,
-                                        frame=frames.Helioprojective)
+        if do_plot:
+            ax.plot_coord(boundary_coords, color='r')
 
-            # Vertices  of feature
-            # R: This can contain NaN. The output of SkyCoord needs to be sanitized
-            pixel_vertex = label_boundary.to_pixel(aia_wcs)
-            verts_x = np.array([x for x in pixel_vertex[0] if not np.isnan(x)])
-            verts_y = np.array([y for y in pixel_vertex[1] if not np.isnan(y)])
-            verts_yx = np.round(np.array((verts_y, verts_x)).T).astype(np.int)
-            verts_yx_list.append(verts_yx)
-            fill_polygon(verts_yx, mask)
+    if do_plot:
+        label_map = Map(mask, aia_wcs)
+        label_map.plot(axes=ax)
+        plt.tight_layout()
+        plt.savefig(os.path.join(save_path, os.path.basename(image_filepath)[0:-4] + '_plot_' + label + '.png'))
 
-            # Need to add in contours between vertices
-            # Need to add in feature filling in mask
 
-        return mask, verts_yx_list
+    return mask, verts_yx_list
 
 
 
@@ -388,22 +408,21 @@ def nearest(items, pivot):
     return min(items, key=lambda x: abs(x - pivot))
 
 
-def write_mask(mask_in, label_time, label='Mask', save_path=''):
+def write_mask(mask_in, label_date, label='Mask', save_path=''):
     """
     Save the feature mask as an image
 
-    :param mask_in: Mask of feature as np array
-    :param label_time: time of the label detection as DateTime
+    :param mask_in: Mask of labels as numpy array
+    :param label_date: time of the label detection as Datetime
     :param label: String of feature type e.g. "SS", "CH", or "AR"
     :param save_path: save path for saving mask as image
     :return: none
     """
 
-    label_date = parse_time(label_time)
-
-    label_mask_name = label_date.strftime("%Y_%m_%d__%H_%M_%S")+'__'+label+'_mask.jp2'
+    label_mask_name = label_date.strftime("%Y_%m_%d__%H_%M_%S")+'__'+label+'_mask'
     save_mask_name = os.path.join(save_path, label_mask_name)
 
-    imwrite(save_mask_name, mask_in.astype('uint8'))
+    np.savez_compressed(save_mask_name, mask_in.astype(np.bool))
+
 
 
