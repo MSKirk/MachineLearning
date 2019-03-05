@@ -70,7 +70,7 @@ class Jp2ImageDownload:
         self.inst_file_map.append('SDO_HMI_HMI_magnetogram')
         # store the list of files in the save directory
         self.jp2f = []
-        self.mask_hek_time_map_csv = os.path.join(self.save_dir, 'mask_hek_time_map.csv')
+        self.mask_hek_time_map_csv = os.path.join(self.save_dir, 'label_jp2_map.csv')
         self.hek_time_jp2_map_csv = os.path.join(self.save_dir, 'hek_time_jp2_map.csv')
         self.rejected_hek_csv = os.path.join(self.save_dir, 'rejected_hek.csv')
         self.missed_downloads_csv = os.path.join(self.save_dir, 'missed_downloads.csv')
@@ -209,21 +209,20 @@ class Jp2ImageDownload:
             else:
                 # Append all files of the group to the hek_time <-> jp2 map
                 jp2_basenames = [os.path.basename(downloaded_files[t]) for t in tmatches]
-                hek_time_jp2_map_entry = [hek_time] + jp2_basenames
+                hek_time_jp2_map_entry = [time_in] + jp2_basenames
                 hek_time_jp2_map.append(hek_time_jp2_map_entry)
 
         # Write hek_time_jp2_map to a csv file
-        with open(self.hek_time_jp2_map_csv, 'w') as csvFile:
+        with open(self.hek_time_jp2_map_csv, 'w+') as csvFile:
             writer = csv.writer(csvFile)
             writer.writerows(hek_time_jp2_map)
         csvFile.close()
         # Write the csv of rejected events
-        with open(self.rejected_hek_csv, 'w') as csvFile:
+        with open(self.rejected_hek_csv, 'w+') as csvFile:
             writer = csv.writer(csvFile)
             writer.writerows(rejected_hek_events)
         csvFile.close()
         print('data cleanup finished.')
-
 
 
     def make_labels(self):
@@ -254,6 +253,14 @@ class Jp2ImageDownload:
             del result[idx]
             del times[idx]
 
+        # Read the mapping of hek times to jp2 files
+        hek_time_jp2_map = []
+        with open(self.hek_time_jp2_map_csv) as csvfile:
+            readcsv = csv.reader(csvfile, delimiter=',')
+            for row in readcsv:
+                hek_time_jp2_map.append(row)
+        csvfile.close()
+
 
         ch = [elem for elem in result if elem['event_type'] == 'CH']
         ar = [elem for elem in result if elem['event_type'] == 'AR']
@@ -263,28 +270,32 @@ class Jp2ImageDownload:
 
         for i, time_in in enumerate(times):
             hek_time = parse_time(time_in)
+            # Get all jp2 files that map to that hek time
+            jp2f_at_hek_time = hek_time_jp2_map[i][1:]
+
             # Get closest image
             nearest_datetime = nearest(jp2_datetimes, hek_time)
             nearest_file = jp2f[jp2_datetimes.index(nearest_datetime)]
             print('...processing hek time: {:s} at index {:d} '.format(hek_time.strftime('%Y/%m/%d %H:%M:%S'), i))
             print('......using nearest image at time: {:s}'.format(nearest_datetime.strftime('%Y/%m/%d %H:%M:%S')))
-
+            # Extract metadata for each class and at the specific date time_in
             ch_list = [elem for elem in ch if elem['event_starttime'] == time_in]
             ar_list = [elem for elem in ar if elem['event_starttime'] == time_in]
             ss_list = [elem for elem in ss if elem['event_starttime'] == time_in]
             # The above 3 lists have typically only 1 that's not empty. Let's explicitly tell to not process any empty label list.
             if ch_list:
                 ch_mask, ch_file_path = gen_label_mask(ch_list, nearest_file, hek_time, 'CH', save_path=self.label_save_dir, do_plot=self.do_plot)
-                mask_time_map.append([os.path.basename(ch_file_path), time_in])
+                mask_time_map.append([os.path.basename(ch_file_path), time_in] + jp2f_at_hek_time)
             if ar_list:
                 ar_mask, ar_file_path = gen_label_mask(ar_list, nearest_file, hek_time, 'AR', save_path=self.label_save_dir, do_plot=self.do_plot)
-                mask_time_map.append([os.path.basename(ar_file_path), time_in])
+                mask_time_map.append([os.path.basename(ar_file_path), time_in] + jp2f_at_hek_time)
             if ss_list:
                 ss_mask, ss_file_path = gen_label_mask(ss_list, nearest_file, hek_time, 'SS', save_path=self.label_save_dir, do_plot=self.do_plot)
-                mask_time_map.append([os.path.basename(ss_file_path), time_in])
+                mask_time_map.append([os.path.basename(ss_file_path), time_in] + jp2f_at_hek_time)
+
 
         # Write mask_time_map to a csv file
-        with open(self.mask_hek_time_map_csv, 'w') as csvFile:
+        with open(self.mask_hek_time_map_csv, 'w+') as csvFile:
             writer = csv.writer(csvFile)
             writer.writerows(mask_time_map)
         csvFile.close()
