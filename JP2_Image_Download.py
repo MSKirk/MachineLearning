@@ -72,8 +72,9 @@ class Jp2ImageDownload:
         self.jp2f = []
         self.mask_hek_time_map_csv = os.path.join(self.save_dir, 'mask_hek_time_map.csv')
         self.hek_time_jp2_map_csv = os.path.join(self.save_dir, 'hek_time_jp2_map.csv')
-        # Let's separate the image download from the initialization
-        # self.download_images()
+        self.rejected_hek_csv = os.path.join(self.save_dir, 'rejected_hek.csv')
+        self.rejected_hek_events = []
+        self.do_plot = True
 
 
     def gen_date_list(self):
@@ -118,6 +119,11 @@ class Jp2ImageDownload:
         Run through the complete set of dates as determined in the self.__init__ call by day
         Sets up a subdirectory tree to organize the images
         """
+        # IF any, move previously discarded files to the save directory (this to be consistent with the cleanup pass)
+        discared_files = sorted(glob.glob(os.path.join(self.reject_dir, '*.jp2')))
+        for f in discared_files:
+            print('restoring discarded file: ' + os.path.basename(f))
+            shutil.move(f, self.save_dir)
 
         # for ii, download_date in enumerate(self.date_list):
         # First download the images. Feature extraction will be done separately
@@ -138,7 +144,11 @@ class Jp2ImageDownload:
             if measurements:
                 print('Checking available data for hek time {:s} at index {:d}'.format(
                     hek_time.strftime('%Y/%m/%d %H:%M:%S'), i))
-                image_files, image_times = download_sdo_images(hek_time, measurements, dt=self.dt, save_path=self.save_dir)
+                try:
+                    image_files, image_times = download_sdo_images(hek_time, measurements, dt=self.dt, save_path=self.save_dir)
+                except ValueError:
+                    # TODO: log the missing file and hek_time when it was queried?
+                    continue
                 for measure_idx, fpath in enumerate(image_files):
                     if fpath is None:
                         print('...Skipped measurement {:s} at time {:s} '.format(measurements[measure_idx],
@@ -164,6 +174,7 @@ class Jp2ImageDownload:
         # Parse filenames to get the actual image time
         jp2_datetimes = [datetime_from_filename(filename) for filename in downloaded_files]
         n_incomplete_groups = 0
+        rejected_hek_events = []
         # Loop over all the hek times and test if we have all measurements after the download process
         # Reject the whole group if that's not the case
         for i, time_in in enumerate(self.times):
@@ -173,6 +184,8 @@ class Jp2ImageDownload:
             if len(tmatches) != len(self.inst_file_map):
                 n_incomplete_groups += 1
                 # Move files in that incomplete group for rejection in seperate directory
+                # TODO: We must also reject the corresponding hek event entry
+                rejected_hek_events.append([self.times.index(time_in), time_in])
                 for f in tmatches:
                     # The same file may have already been move if the hek time matched again to that file
                     # so check first it exist
@@ -189,6 +202,11 @@ class Jp2ImageDownload:
             writer = csv.writer(csvFile)
             writer.writerows(hek_time_jp2_map)
         csvFile.close()
+        # Write the csv of rejected events
+        with open(self.rejected_hek_csv, 'w') as csvFile:
+            writer = csv.writer(csvFile)
+            writer.writerows(rejected_hek_events)
+        csvFile.close()
 
 
 
@@ -197,13 +215,29 @@ class Jp2ImageDownload:
         Create feature masks from the downloaded images for the start and end time defined for self. Save them to disk
         in the subdirectory 'label_masks' under the image directory.
         """
-
+        if self.do_plot:
+            matplotlib.rcParams.update({'font.size': 18})
         # Get a list of existing files (if any)
         jp2f = sorted(glob.glob(os.path.join(self.save_dir, '*.jp2')))
         # Parse filenames to get the actual image time
         jp2_datetimes = [datetime_from_filename(filename) for filename in jp2f]
 
+        # Use the curated hek results from the cleanup pass instead of querying the hek again.
+        # Otherwise this will use an uncurated list of hek times, and inconsistent map of jp2 <-> hek times
         result, times = get_hek_result(self.tstart, self.tend)
+        # Read the csv for rejected events
+        self.rejected_hek_events = []
+        with open(self.rejected_hek_csv) as csvfile:
+            readcsv = csv.reader(csvfile, delimiter=',')
+            for row in readcsv:
+                self.rejected_hek_events.append(row[1])
+        csvfile.close()
+        # Filter out the rejected events
+        for time in self.rejected_hek_events:
+            idx = times.index(time)
+            del result[idx]
+            del times[idx]
+
 
         ch = [elem for elem in result if elem['event_type'] == 'CH']
         ar = [elem for elem in result if elem['event_type'] == 'AR']
@@ -224,13 +258,13 @@ class Jp2ImageDownload:
             ss_list = [elem for elem in ss if elem['event_starttime'] == time_in]
             # The above 3 lists have typically only 1 that's not empty. Let's explicitly tell to not process any empty label list.
             if ch_list:
-                ch_mask, ch_file_path = gen_label_mask(ch_list, nearest_file, hek_time, 'CH', save_path=self.label_save_dir, do_plot=True)
+                ch_mask, ch_file_path = gen_label_mask(ch_list, nearest_file, hek_time, 'CH', save_path=self.label_save_dir, do_plot=self.do_plot)
                 mask_time_map.append([os.path.basename(ch_file_path), time_in])
             if ar_list:
-                ar_mask, ar_file_path = gen_label_mask(ar_list, nearest_file, hek_time, 'AR', save_path=self.label_save_dir, do_plot=True)
+                ar_mask, ar_file_path = gen_label_mask(ar_list, nearest_file, hek_time, 'AR', save_path=self.label_save_dir, do_plot=self.do_plot)
                 mask_time_map.append([os.path.basename(ar_file_path), time_in])
             if ss_list:
-                ss_mask, ss_file_path = gen_label_mask(ss_list, nearest_file, hek_time, 'SS', save_path=self.label_save_dir, do_plot=True)
+                ss_mask, ss_file_path = gen_label_mask(ss_list, nearest_file, hek_time, 'SS', save_path=self.label_save_dir, do_plot=self.do_plot)
                 mask_time_map.append([os.path.basename(ss_file_path), time_in])
 
         # Write mask_time_map to a csv file
@@ -255,17 +289,18 @@ def gen_label_mask(label_list, image_filepath, hek_time, label, save_path=None, 
 
     print('.........processing ' + label)
     jp2_header = get_header(image_filepath)[0]
-    aia_wcs = WCS(jp2_header)
-    mask_shape = [4096, 4096]
+    mask_shape = (4096, 4096)
+    jp2_shape = (jp2_header['NAXIS1'], jp2_header['NAXIS2'])
     mask = np.zeros(mask_shape, dtype=np.int)
     dummy_array = np.empty(mask_shape, dtype=np.int)
     verts_yx_list = []
 
-    if aia_wcs.array_shape != mask.shape:
+    if jp2_shape != mask.shape:
         raise ValueError('Mask and WCS array shapes do not agree.')
 
-    aia_map = Map(dummy_array, aia_wcs)
+    aia_map = Map(dummy_array, jp2_header)
 
+    fig, ax = None, None
     if do_plot:
         fig = plt.figure(figsize=(10, 10))
         ax = plt.subplot(projection=aia_map)
@@ -298,9 +333,12 @@ def gen_label_mask(label_list, image_filepath, hek_time, label, save_path=None, 
 
 
     if do_plot:
-        label_map = Map(mask, aia_wcs)
+        label_map = Map(mask, jp2_header)
         label_map.plot(axes=ax)
-        plt.tight_layout()
+        label_map.draw_limb()
+        ax.set_title(label + ' @ hek_time: ' + hek_time.strftime('%Y/%m/%d %H:%M:%S'))
+        # TODO: fix the tight_layout issue
+        #plt.tight_layout()
         plt.savefig(os.path.join(save_path, os.path.basename(image_filepath)[0:-4] + '_plot_' + label + '.png'))
         plt.close(fig)
 
@@ -427,7 +465,7 @@ def write_mask(mask_in, label_date, label='Mask', save_path=''):
     :return: path to the saved file
     """
 
-    label_mask_name = label_date.strftime("%Y_%m_%d__%H_%M_%S")+'__'+label+'_mask'
+    label_mask_name = label_date.strftime("%Y_%m_%d__%H_%M_%S")+'__'+label+'_mask.npz'
     save_mask_name = os.path.join(save_path, label_mask_name)
 
     np.savez_compressed(save_mask_name, mask_in.astype(np.bool))
