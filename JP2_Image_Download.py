@@ -54,7 +54,7 @@ class Jp2ImageDownload:
 
         self.tstart = parse_time(tstart)
         self.tend = parse_time(tend)
-        self.times = []
+        self.hek_times = []
 
         self.date_list, self.date_string_list  = self.gen_date_list()
         # time gap tolerated between requested time and image time s.t. time_in - dt < actual image time < time_in + dt
@@ -73,7 +73,10 @@ class Jp2ImageDownload:
         self.mask_hek_time_map_csv = os.path.join(self.save_dir, 'mask_hek_time_map.csv')
         self.hek_time_jp2_map_csv = os.path.join(self.save_dir, 'hek_time_jp2_map.csv')
         self.rejected_hek_csv = os.path.join(self.save_dir, 'rejected_hek.csv')
+        self.missed_downloads_csv = os.path.join(self.save_dir, 'missed_downloads.csv')
         self.rejected_hek_events = []
+        self.missed_downloads = []
+        self.download_flag = True
         self.do_plot = True
 
 
@@ -118,6 +121,7 @@ class Jp2ImageDownload:
         """
         Run through the complete set of dates as determined in the self.__init__ call by day
         Sets up a subdirectory tree to organize the images
+
         """
         # IF any, move previously discarded files to the save directory (this to be consistent with the cleanup pass)
         discared_files = sorted(glob.glob(os.path.join(self.reject_dir, '*.jp2')))
@@ -133,9 +137,10 @@ class Jp2ImageDownload:
         # Parse filenames to get the actual image time
         jp2_datetimes = [datetime_from_filename(filename) for filename in jp2f]
         # Get hek event times
-        _, self.times = get_hek_result(self.tstart, self.tend)
-
-        for i, time_in in enumerate(self.times):
+        _, self.hek_times = get_hek_result(self.tstart, self.tend)
+        # Initialize the list of missed_downloads list that will contain any hek time entry that failed to download
+        self.missed_downloads = []
+        for i, time_in in enumerate(self.hek_times):
             # Check that we haven't already downloaded some data for that hek time.
             # Skip them if we did and download only the missing ones.
             hek_time = parse_time(time_in)
@@ -147,11 +152,11 @@ class Jp2ImageDownload:
                 try:
                     image_files, image_times = download_sdo_images(hek_time, measurements, dt=self.dt, save_path=self.save_dir)
                 except ValueError:
-                    # TODO: log the missing file and hek_time when it was queried?
+                    self.missed_downloads.append(time_in)
                     continue
                 for measure_idx, fpath in enumerate(image_files):
                     if fpath is None:
-                        print('...Skipped measurement {:s} at time {:s} '.format(measurements[measure_idx],
+                        print('...Skipped measurement {:s} at time {:s} (too far from hek time) '.format(measurements[measure_idx],
                                                                                  image_times[measure_idx].strftime(
                                                                                      '%Y_%m_%d %H:%M:%S')))
                     else:
@@ -160,7 +165,16 @@ class Jp2ImageDownload:
                 print('skipping already downloaded data for hek time {:s}'.format(
                     hek_time.strftime('%Y/%m/%d %H:%M:%S')))
 
-        self.data_cleanup()
+        if self.missed_downloads:
+            with open(self.missed_downloads_csv, 'w') as csvFile:
+                writer = csv.writer(csvFile)
+                writer.writerows(self.missed_downloads)
+            csvFile.close()
+            self.download_flag = True
+        else:
+            self.download_flag = False
+
+        #self.data_cleanup()
         print('Finished download')
 
 
@@ -168,6 +182,7 @@ class Jp2ImageDownload:
         """
         Cleanup the downloaded image to have only complete groups in the training set
         """
+        print('data cleanup...')
         hek_time_jp2_map = []
         # List the downloaded images
         downloaded_files = sorted(glob.glob(os.path.join(self.save_dir, '*.jp2')))
@@ -177,7 +192,7 @@ class Jp2ImageDownload:
         rejected_hek_events = []
         # Loop over all the hek times and test if we have all measurements after the download process
         # Reject the whole group if that's not the case
-        for i, time_in in enumerate(self.times):
+        for i, time_in in enumerate(self.hek_times):
             hek_time = parse_time(time_in)
             # Get the index of files whose time fall within a 2hr window centered on the hek event time
             tmatches = [i for i, file_time in enumerate(jp2_datetimes) if hek_time - self.dt < file_time < hek_time + self.dt]
@@ -185,7 +200,7 @@ class Jp2ImageDownload:
                 n_incomplete_groups += 1
                 # Move files in that incomplete group for rejection in seperate directory
                 # TODO: We must also reject the corresponding hek event entry
-                rejected_hek_events.append([self.times.index(time_in), time_in])
+                rejected_hek_events.append([self.hek_times.index(time_in), time_in])
                 for f in tmatches:
                     # The same file may have already been move if the hek time matched again to that file
                     # so check first it exist
@@ -207,6 +222,7 @@ class Jp2ImageDownload:
             writer = csv.writer(csvFile)
             writer.writerows(rejected_hek_events)
         csvFile.close()
+        print('data cleanup finished.')
 
 
 
