@@ -180,8 +180,8 @@ class Jp2ImageDownload:
                         shutil.move(downloaded_files[f], os.path.join(self.reject_dir, os.path.basename(downloaded_files[f])))
             else:
                 # Append all files of the group to the hek_time <-> jp2 map
-                jp2_files = [downloaded_files[t] for t in tmatches]
-                hek_time_jp2_map_entry = [hek_time] + jp2_files
+                jp2_basenames = [os.path.basename(downloaded_files[t]) for t in tmatches]
+                hek_time_jp2_map_entry = [hek_time] + jp2_basenames
                 hek_time_jp2_map.append(hek_time_jp2_map_entry)
 
         # Write hek_time_jp2_map to a csv file
@@ -225,13 +225,13 @@ class Jp2ImageDownload:
             # The above 3 lists have typically only 1 that's not empty. Let's explicitly tell to not process any empty label list.
             if ch_list:
                 ch_mask, ch_file_path = gen_label_mask(ch_list, nearest_file, hek_time, 'CH', save_path=self.label_save_dir, do_plot=True)
-                mask_time_map.append([ch_file_path, time_in])
+                mask_time_map.append([os.path.basename(ch_file_path), time_in])
             if ar_list:
                 ar_mask, ar_file_path = gen_label_mask(ar_list, nearest_file, hek_time, 'AR', save_path=self.label_save_dir, do_plot=True)
-                mask_time_map.append([ar_file_path, time_in])
+                mask_time_map.append([os.path.basename(ar_file_path), time_in])
             if ss_list:
                 ss_mask, ss_file_path = gen_label_mask(ss_list, nearest_file, hek_time, 'SS', save_path=self.label_save_dir, do_plot=True)
-                mask_time_map.append([ss_file_path, time_in])
+                mask_time_map.append([os.path.basename(ss_file_path), time_in])
 
         # Write mask_time_map to a csv file
         with open(self.mask_hek_time_map_csv, 'w') as csvFile:
