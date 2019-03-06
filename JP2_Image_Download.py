@@ -56,7 +56,7 @@ class Jp2ImageDownload:
         self.label_save_dir = os.path.join(self.save_dir, 'label_masks')
         os.makedirs(self.label_save_dir, exist_ok=True)
 
-        self.hek_times = []
+        self.hek_times = None
         # time gap tolerated between requested time and image time s.t. time_in - dt < actual image time < time_in + dt
         self.dt = dt
         # Build lists of measurements that will be requested from the SDO data archive
@@ -68,6 +68,7 @@ class Jp2ImageDownload:
         self.inst_file_map = ['SDO_AIA_AIA_{:s}'.format(wav) for wav in self.aia_wav]
         self.inst_file_map.append('SDO_HMI_HMI_continuum')
         self.inst_file_map.append('SDO_HMI_HMI_magnetogram')
+        self.inst_file_map.sort()
         # store the list of files in the save directory
         self.jp2f = []
         self.mask_hek_time_map_csv = os.path.join(self.save_dir, 'label_jp2_map.csv')
@@ -170,6 +171,8 @@ class Jp2ImageDownload:
         Cleanup the downloaded image to have only complete groups in the training set
         """
         print('data cleanup...')
+        if self.hek_times is None:
+            _, self.hek_times = get_hek_result(self.tstart, self.tend)
         hek_time_jp2_map = []
         # List the downloaded images
         downloaded_files = sorted(glob.glob(os.path.join(self.save_dir, '*.jp2')))
@@ -181,9 +184,14 @@ class Jp2ImageDownload:
         # Reject the whole group if that's not the case
         for i, time_in in enumerate(self.hek_times):
             hek_time = parse_time(time_in)
-            # Get the index of files whose time fall within a 2hr window centered on the hek event time
+            # Get the index of files whose time fall within a 1hr window centered on the hek event time
             tmatches = [i for i, file_time in enumerate(jp2_datetimes) if hek_time - self.dt < file_time < hek_time + self.dt]
-            if len(tmatches) != len(self.inst_file_map):
+            # Extract what instrument are these files coming from
+            file_inst_list = [os.path.basename(downloaded_files[t])[25:-4] for t in tmatches]
+            file_inst_match_list = [inst for inst in self.inst_file_map if inst in file_inst_list]
+            file_inst_match_list.sort()
+
+            if file_inst_match_list != self.inst_file_map:
                 n_incomplete_groups += 1
                 # Flag this hek event as having an incomplete number of files so as to ignore it later.
                 rejected_hek_events.append([self.hek_times.index(time_in), time_in])
