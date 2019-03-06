@@ -26,12 +26,12 @@ import csv
 
 class Jp2ImageDownload:
 
-    def __init__(self, save_dir, full_image_set=False, dt=timedelta(minutes=30),
+    def __init__(self, save_dir, dt=timedelta(minutes=30),
                  tstart='2012/05/30 23:59:59', tend='2012/05/31 23:59:59'):
         """
         Set up initial start and ending times and save directory.
 
-        :param save_dir: Directory to contain the full subdirectory tree of images and masks
+        :param save_dir: parent directory to contain the year/month-based-name subdirectories of images, masks, and csv files
         :param full_image_set: boolean if true will run through the entire SDO catalogue
         :param tstart: starting time string of any format read by parse_time
         :param tend: ending time string of any format read by parse_time
@@ -42,8 +42,12 @@ class Jp2ImageDownload:
         #     tstart = '2010/05/31 23:59:59'
         #     tend = '2018/12/31 23:59:59'
 
-        self.save_dir = os.path.abspath(save_dir)
-
+        self.tstart = parse_time(tstart)
+        self.tend = parse_time(tend)
+        # Build subdirectory name from queried year and month
+        subdir = parse_time(tstart).strftime('%Y_%m')
+        self.save_dir = os.path.join(save_dir, subdir)
+        os.makedirs(self.save_dir, exist_ok=True)
         # Subdirectory for discarding the files from incomplete sets
         self.reject_dir = os.path.join(self.save_dir, 'incomplete_set')
         # Create the "rejection" subdirectory to move the images from incomplete groups
@@ -52,11 +56,7 @@ class Jp2ImageDownload:
         self.label_save_dir = os.path.join(self.save_dir, 'label_masks')
         os.makedirs(self.label_save_dir, exist_ok=True)
 
-        self.tstart = parse_time(tstart)
-        self.tend = parse_time(tend)
         self.hek_times = []
-
-        self.date_list, self.date_string_list  = self.gen_date_list()
         # time gap tolerated between requested time and image time s.t. time_in - dt < actual image time < time_in + dt
         self.dt = dt
         # Build lists of measurements that will be requested from the SDO data archive
@@ -78,19 +78,6 @@ class Jp2ImageDownload:
         self.missed_downloads = []
         self.download_flag = True
         self.do_plot = True
-
-
-    def gen_date_list(self):
-        """
-        Create list of datetimes by day
-
-        :return: list of datetimes broken into day segments and their string representation
-        """
-        time_between = self.tend - self.tstart
-        ndays = max(1, time_between.days)
-        date_list = [self.tstart + timedelta(days=dd) for dd in range(0, ndays+1)]
-        date_string_list = [tt.strftime('%Y/%m/%d %H:%M:%S') for tt in date_list]
-        return date_list, date_string_list
 
 
     def list_missing_measurements(self, hek_time, jp2_files, jp2_datetimes):
@@ -201,16 +188,27 @@ class Jp2ImageDownload:
                 # Move files in that incomplete group for rejection in seperate directory
                 # TODO: We must also reject the corresponding hek event entry
                 rejected_hek_events.append([self.hek_times.index(time_in), time_in])
-                for f in tmatches:
-                    # The same file may have already been move if the hek time matched again to that file
-                    # so check first it exist
-                    if os.path.isfile(downloaded_files[f]):
-                        shutil.move(downloaded_files[f], os.path.join(self.reject_dir, os.path.basename(downloaded_files[f])))
+                # for f in tmatches:
+                #     # The same file may have already been move if the hek time matched again to that file
+                #     # so check first it exist
+                #     if os.path.isfile(downloaded_files[f]):
+                #         shutil.move(downloaded_files[f], os.path.join(self.reject_dir, os.path.basename(downloaded_files[f])))
             else:
                 # Append all files of the group to the hek_time <-> jp2 map
                 jp2_basenames = [os.path.basename(downloaded_files[t]) for t in tmatches]
                 hek_time_jp2_map_entry = [time_in] + jp2_basenames
                 hek_time_jp2_map.append(hek_time_jp2_map_entry)
+
+        ## move the file present in the directory but that are not listed in hek_time_jp2_map.
+        # list the valid files that have an entry in the hek time as a complete set
+        valid_sets = [row[1:] for row in hek_time_jp2_map]
+        # Need to unroll all of them in one single flat list, convert them back with a full path.
+        flat_valid_files = [os.path.join(self.save_dir, file) for file_set in valid_sets for file in file_set]
+        # Now for each file in the directory that does not match any file in flat_valid_files, discard them
+        for file in downloaded_files:
+            if file not in flat_valid_files:
+                shutil.move(file, os.path.join(self.reject_dir, os.path.basename(file)))
+
 
         # Write hek_time_jp2_map to a csv file
         with open(self.hek_time_jp2_map_csv, 'w+') as csvFile:
