@@ -4,8 +4,8 @@ import JP2_Image_Download as Jpd
 
 save_dir = os.path.join(os.path.expanduser('~'), 'Data/michael/MachineLearning/Hek_project/')
 
-tstart = '2012/06/01 00:00:00'
-tend = '2012/06/30 23:59:59'
+tstart = '2012/07/01 00:00:00'
+tend = '2012/07/31 23:00:00'
 j = Jpd.Jp2ImageDownload(save_dir, tstart=tstart, tend=tend)
 
 while j.download_flag:

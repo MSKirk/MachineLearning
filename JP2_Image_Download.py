@@ -345,7 +345,7 @@ def gen_label_mask(label_list, image_filepath, hek_time, label, save_path=None, 
 
         # Vertices  of feature
         pixel_verts = aia_map.world_to_pixel(boundary_coords)
-        print(pixel_verts)
+        #print(pixel_verts)
         verts_x = np.array([x for x in pixel_verts[0].value if not np.isnan(x)])
         verts_y = np.array([y for y in pixel_verts[1].value if not np.isnan(y)])
         verts_yx = np.round(np.array((verts_y, verts_x)).T).astype(np.int)
