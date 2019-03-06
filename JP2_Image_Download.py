@@ -153,7 +153,7 @@ class Jp2ImageDownload:
                     hek_time.strftime('%Y/%m/%d %H:%M:%S')))
 
         if self.missed_downloads:
-            with open(self.missed_downloads_csv, 'w') as csvFile:
+            with open(self.missed_downloads_csv, 'w+') as csvFile:
                 writer = csv.writer(csvFile)
                 writer.writerows(self.missed_downloads)
             csvFile.close()
@@ -185,14 +185,8 @@ class Jp2ImageDownload:
             tmatches = [i for i, file_time in enumerate(jp2_datetimes) if hek_time - self.dt < file_time < hek_time + self.dt]
             if len(tmatches) != len(self.inst_file_map):
                 n_incomplete_groups += 1
-                # Move files in that incomplete group for rejection in seperate directory
-                # TODO: We must also reject the corresponding hek event entry
+                # Flag this hek event as having an incomplete number of files so as to ignore it later.
                 rejected_hek_events.append([self.hek_times.index(time_in), time_in])
-                # for f in tmatches:
-                #     # The same file may have already been move if the hek time matched again to that file
-                #     # so check first it exist
-                #     if os.path.isfile(downloaded_files[f]):
-                #         shutil.move(downloaded_files[f], os.path.join(self.reject_dir, os.path.basename(downloaded_files[f])))
             else:
                 # Append all files of the group to the hek_time <-> jp2 map
                 jp2_basenames = [os.path.basename(downloaded_files[t]) for t in tmatches]
