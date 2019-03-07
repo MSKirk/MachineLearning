@@ -285,25 +285,23 @@ class Jp2ImageDownload:
             if ch_list:
                 ch_mask, ch_file_path, ch_blanks = gen_label_mask(ch_list, nearest_file, hek_time, 'CH', save_path=self.label_save_dir, do_plot=self.do_plot)
                 mask_time_map.append([os.path.basename(ch_file_path), time_in] + jp2f_at_hek_time)
-                if ch_blanks:
-                    self.blank_hek_events.append(ch_blanks)
+                self.blank_hek_events += ch_blanks
             if ar_list:
                 ar_mask, ar_file_path, ar_blanks = gen_label_mask(ar_list, nearest_file, hek_time, 'AR', save_path=self.label_save_dir, do_plot=self.do_plot)
                 mask_time_map.append([os.path.basename(ar_file_path), time_in] + jp2f_at_hek_time)
-                if ar_blanks:
-                    self.blank_hek_events.append(ar_blanks)
+                self.blank_hek_events += ar_blanks
             if ss_list:
                 ss_mask, ss_file_path, ss_blanks = gen_label_mask(ss_list, nearest_file, hek_time, 'SS', save_path=self.label_save_dir, do_plot=self.do_plot)
                 mask_time_map.append([os.path.basename(ss_file_path), time_in] + jp2f_at_hek_time)
-                if ss_blanks:
-                    self.blank_hek_events.append(ss_blanks)
+                self.blank_hek_events += ss_blanks
 
         # Create the csv file that will contain the "blank" hek events, i.e, event that have a hek entry but no
         # hpc_boundcc coordinates
         with open(self.blank_hek_events_csv, 'w+') as outcsv:
             writer = csv.writer(outcsv)
-            writer.writerow(["frm_specificid", "event_starttime"])
+            writer.writerow(['frm_specificid', 'event_starttime'])
             writer.writerows(self.blank_hek_events)
+        outcsv.close()
 
         # Write mask_time_map to a csv file
         with open(self.mask_hek_time_map_csv, 'w+') as csvFile:
