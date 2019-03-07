@@ -6,10 +6,8 @@ from sunpy.time import parse_time
 from sunpy.coordinates import frames
 from sunpy.io import read_file_header
 from sunpy.map import Map
-
 import astropy.units as u
 from astropy.coordinates import SkyCoord
-from astropy.wcs import WCS
 
 import numpy as np
 
@@ -21,8 +19,7 @@ import os, glob, shutil
 from mahotas.polygon import fill_polygon
 import csv
 
-
-
+TIME_FORMAT = '%Y/%m/%d %H:%M:%S'
 
 class Jp2ImageDownload:
 
@@ -75,11 +72,14 @@ class Jp2ImageDownload:
         self.hek_time_jp2_map_csv = os.path.join(self.save_dir, 'hek_time_jp2_map.csv')
         self.rejected_hek_csv = os.path.join(self.save_dir, 'rejected_hek.csv')
         self.missed_downloads_csv = os.path.join(self.save_dir, 'missed_downloads.csv')
+        self.blank_hek_events_csv = os.path.join(self.save_dir, 'blank_hek_events.csv')
         self.rejected_hek_events = []
         self.missed_downloads = []
+        self.blank_hek_events = []
         self.download_flag = True
         self.do_plot = True
 
+        matplotlib.rcParams.update({'font.size': 18})
 
     def list_missing_measurements(self, hek_time, jp2_files, jp2_datetimes):
         """
@@ -230,16 +230,15 @@ class Jp2ImageDownload:
         Create feature masks from the downloaded images for the start and end time defined for self. Save them to disk
         in the subdirectory 'label_masks' under the image directory.
         """
-        if self.do_plot:
-            matplotlib.rcParams.update({'font.size': 18})
+
+
         # Get a list of existing files (if any)
         jp2f = sorted(glob.glob(os.path.join(self.save_dir, '*.jp2')))
         # Parse filenames to get the actual image time
         jp2_datetimes = [datetime_from_filename(filename) for filename in jp2f]
-
         # Use the curated hek results from the cleanup pass instead of querying the hek again.
         # Otherwise this will use an uncurated list of hek times, and inconsistent map of jp2 <-> hek times
-        result, times = get_hek_result(self.tstart, self.tend)
+        results, times = get_hek_result(self.tstart, self.tend)
         # Read the csv for rejected events
         self.rejected_hek_events = []
         with open(self.rejected_hek_csv) as csvfile:
@@ -250,7 +249,7 @@ class Jp2ImageDownload:
         # Filter out the rejected events
         for time in self.rejected_hek_events:
             idx = times.index(time)
-            del result[idx]
+            del results[idx]
             del times[idx]
 
         # Read the mapping of hek times to jp2 files
@@ -262,9 +261,9 @@ class Jp2ImageDownload:
         csvfile.close()
 
 
-        ch = [elem for elem in result if elem['event_type'] == 'CH']
-        ar = [elem for elem in result if elem['event_type'] == 'AR']
-        ss = [elem for elem in result if elem['event_type'] == 'SS']
+        ch = [elem for elem in results if elem['event_type'] == 'CH']
+        ar = [elem for elem in results if elem['event_type'] == 'AR']
+        ss = [elem for elem in results if elem['event_type'] == 'SS']
 
         mask_time_map = []
 
@@ -284,15 +283,27 @@ class Jp2ImageDownload:
             ss_list = [elem for elem in ss if elem['event_starttime'] == time_in]
             # The above 3 lists have typically only 1 that's not empty. Let's explicitly tell to not process any empty label list.
             if ch_list:
-                ch_mask, ch_file_path = gen_label_mask(ch_list, nearest_file, hek_time, 'CH', save_path=self.label_save_dir, do_plot=self.do_plot)
+                ch_mask, ch_file_path, ch_blanks = gen_label_mask(ch_list, nearest_file, hek_time, 'CH', save_path=self.label_save_dir, do_plot=self.do_plot)
                 mask_time_map.append([os.path.basename(ch_file_path), time_in] + jp2f_at_hek_time)
+                if ch_blanks:
+                    self.blank_hek_events.append(ch_blanks)
             if ar_list:
-                ar_mask, ar_file_path = gen_label_mask(ar_list, nearest_file, hek_time, 'AR', save_path=self.label_save_dir, do_plot=self.do_plot)
+                ar_mask, ar_file_path, ar_blanks = gen_label_mask(ar_list, nearest_file, hek_time, 'AR', save_path=self.label_save_dir, do_plot=self.do_plot)
                 mask_time_map.append([os.path.basename(ar_file_path), time_in] + jp2f_at_hek_time)
+                if ar_blanks:
+                    self.blank_hek_events.append(ar_blanks)
             if ss_list:
-                ss_mask, ss_file_path = gen_label_mask(ss_list, nearest_file, hek_time, 'SS', save_path=self.label_save_dir, do_plot=self.do_plot)
+                ss_mask, ss_file_path, ss_blanks = gen_label_mask(ss_list, nearest_file, hek_time, 'SS', save_path=self.label_save_dir, do_plot=self.do_plot)
                 mask_time_map.append([os.path.basename(ss_file_path), time_in] + jp2f_at_hek_time)
+                if ss_blanks:
+                    self.blank_hek_events.append(ss_blanks)
 
+        # Create the csv file that will contain the "blank" hek events, i.e, event that have a hek entry but no
+        # hpc_boundcc coordinates
+        with open(self.blank_hek_events_csv, 'w+') as outcsv:
+            writer = csv.writer(outcsv)
+            writer.writerow(["frm_specificid", "event_starttime"])
+            writer.writerows(self.blank_hek_events)
 
         # Write mask_time_map to a csv file
         with open(self.mask_hek_time_map_csv, 'w+') as csvFile:
@@ -321,6 +332,7 @@ def gen_label_mask(label_list, image_filepath, hek_time, label, save_path=None, 
     mask = np.zeros(mask_shape, dtype=np.int)
     dummy_array = np.empty(mask_shape, dtype=np.int)
     verts_yx_list = []
+    blank_hek_elems = []
 
     if jp2_shape != mask.shape:
         raise ValueError('Mask and WCS array shapes do not agree.')
@@ -339,22 +351,26 @@ def gen_label_mask(label_list, image_filepath, hek_time, label, save_path=None, 
         p2 = p1.split(',')
         p3 = [v.split(" ") for v in p2]
         print(labels["hpc_boundcc"])
-        print(p3)
+        #TODO: must take into account the events where hpc_boundcc is blank or cannot give us a polygon.
+        if len(p3) > 2:
+            # Convert coordinates of polygon vertices from helioprojective cartesian (HPC) to pixel "image" coordinates.
+            boundary_coords = SkyCoord([(float(v[0]), float(v[1])) * u.arcsec for v in p3], frame=aia_map.coordinate_frame)
+            pixel_verts = aia_map.world_to_pixel(boundary_coords)
+            #print(pixel_verts)
+            verts_x = np.array([x for x in pixel_verts[0].value if not np.isnan(x)])
+            verts_y = np.array([y for y in pixel_verts[1].value if not np.isnan(y)])
+            verts_yx = np.round(np.array((verts_y, verts_x)).T).astype(np.int)
+            verts_yx_list.append(verts_yx)
+            # The mask is populated in-place -> accross different instances of the same hek event, the mask builds itself.
+            fill_polygon(verts_yx, mask)
 
-        boundary_coords = SkyCoord([(float(v[0]), float(v[1])) * u.arcsec for v in p3], frame=aia_map.coordinate_frame)
-
-        # Vertices  of feature
-        pixel_verts = aia_map.world_to_pixel(boundary_coords)
-        #print(pixel_verts)
-        verts_x = np.array([x for x in pixel_verts[0].value if not np.isnan(x)])
-        verts_y = np.array([y for y in pixel_verts[1].value if not np.isnan(y)])
-        verts_yx = np.round(np.array((verts_y, verts_x)).T).astype(np.int)
-        verts_yx_list.append(verts_yx)
-        # The mask is populated in-place -> accross different instances of the same hek event, the mask builds itself.
-        fill_polygon(verts_yx, mask)
-
-        if do_plot:
-            ax.plot_coord(boundary_coords, color='r')
+            if do_plot:
+                ax.plot_coord(boundary_coords, color='r')
+        else:
+            blank_hek_elems.append([labels['frm_specificid'], labels['event_starttime']])
+    # In the very rare case where the HPC coordinates of all elements in the hek result are blank, raise that specifically to let us know.
+    if len(blank_hek_elems) == len(label_list):
+        raise Exception('All elements at hek_time {:s} are blank for label {:s}'.format(hek_time.strftime(TIME_FORMAT), label))
 
     mask_file_path = write_mask(mask, hek_time, label, save_path=save_path)
 
@@ -370,7 +386,7 @@ def gen_label_mask(label_list, image_filepath, hek_time, label, save_path=None, 
         plt.close(fig)
 
 
-    return mask, mask_file_path
+    return mask, mask_file_path, blank_hek_elems
 
 
 
@@ -386,11 +402,11 @@ def datetime_from_filename(filepath):
 
 def get_hek_result(time_start, time_end):
     client = hek.HEKClient()
-    result = client.search(hek.attrs.Time(time_start, time_end), hek.attrs.FRM.Name == 'SPoCA')  # CH and AR
-    result += client.search(hek.attrs.Time(time_start, time_end), hek.attrs.FRM.Name == 'EGSO_SFC')  # SS
-    times = list(set([elem["event_starttime"] for elem in result]))
+    results = client.search(hek.attrs.Time(time_start, time_end), hek.attrs.FRM.Name == 'SPoCA')  # CH and AR
+    results += client.search(hek.attrs.Time(time_start, time_end), hek.attrs.FRM.Name == 'EGSO_SFC')  # SS
+    times = list(set([elem["event_starttime"] for elem in results]))
     times.sort()
-    return result, times
+    return results, times
 
 
 def download_sdo_images(time_in, measurements, dt, save_path=''):
