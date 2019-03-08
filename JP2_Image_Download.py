@@ -20,6 +20,7 @@ from mahotas.polygon import fill_polygon
 import csv
 
 TIME_FORMAT = '%Y/%m/%d %H:%M:%S'
+FILE_TIME_FORMAT = '%Y_%m_%dT%H_%M_%S'
 
 class Jp2ImageDownload:
 
@@ -44,7 +45,8 @@ class Jp2ImageDownload:
         # Build subdirectory name from queried year and month
         subdir = parse_time(tstart).strftime('%Y_%m')
         self.save_dir = os.path.join(save_dir, subdir)
-        os.makedirs(self.save_dir, exist_ok=True)
+        self.save_dir_jp2 = os.path.join(save_dir, subdir, 'jp2')
+        os.makedirs(self.save_dir_jp2, exist_ok=True)
         # Subdirectory for discarding the files from incomplete sets
         self.reject_dir = os.path.join(self.save_dir, 'incomplete_set')
         # Create the "rejection" subdirectory to move the images from incomplete groups
@@ -68,11 +70,15 @@ class Jp2ImageDownload:
         self.inst_file_map.sort()
         # store the list of files in the save directory
         self.jp2f = []
+        self.jp2_datetimes = []
+        self.jp2_measurements = []
+        self.generic_filenames = []
         self.mask_hek_time_map_csv = os.path.join(self.save_dir, 'label_jp2_map.csv')
         self.hek_time_jp2_map_csv = os.path.join(self.save_dir, 'hek_time_jp2_map.csv')
         self.rejected_hek_csv = os.path.join(self.save_dir, 'rejected_hek.csv')
         self.missed_downloads_csv = os.path.join(self.save_dir, 'missed_downloads.csv')
         self.blank_hek_events_csv = os.path.join(self.save_dir, 'blank_hek_events.csv')
+        self.hek_time_jp2_map = []
         self.rejected_hek_events = []
         self.missed_downloads = []
         self.blank_hek_events = []
@@ -80,29 +86,6 @@ class Jp2ImageDownload:
         self.do_plot = True
 
         matplotlib.rcParams.update({'font.size': 18})
-
-    def list_missing_measurements(self, hek_time, jp2_files, jp2_datetimes):
-        """
-        In case of an incomplete or earlier run that got interrupted, check what data are missing using the
-        times and instrument descriptors parsed from the jpeg2000 file names.
-        If no jpeg2000 files are present, returns the entire list measurements needed.
-
-        :param hek_time: datetime time of the hek event
-        :param jp2_files: list of jpeg2000 file paths already downloaded
-        :param jp2_datetimes: list of datetime times of the jpeg2000 files
-        :return: list of missing measurements that needs to be downloaded if available.
-        """
-
-        if not jp2_files:
-            return self.measurements_req
-        # Get the index of files whose time fall within a 2hr window centered on the hek event time
-        tmatches = [idx for idx, jp2_time in enumerate(jp2_datetimes) if hek_time - self.dt < jp2_time < hek_time + self.dt]
-        # Get the series of files at these indices and get which instruments & measurements they are
-        inst_names = [os.path.basename(jp2_files[idx])[25:-4] for idx in tmatches]
-        # Check what measurements are missing. Return missing ones in a list.
-        measurements = [self.measurements_req[i] for i, x in enumerate(self.inst_file_map) if x not in inst_names]
-        # if that measurements_ list is not empty, we need to download those.
-        return measurements
 
 
     def download_images(self):
@@ -115,46 +98,81 @@ class Jp2ImageDownload:
         discared_files = sorted(glob.glob(os.path.join(self.reject_dir, '*.jp2')))
         for f in discared_files:
             print('restoring discarded file: ' + os.path.basename(f))
-            shutil.move(f, self.save_dir)
+            shutil.move(f, self.save_dir_jp2)
 
         # for ii, download_date in enumerate(self.date_list):
         # First download the images. Feature extraction will be done separately
 
         # Get a list of existing files (if any)
-        jp2f = sorted(glob.glob(os.path.join(self.save_dir, '*.jp2')))
+        self.jp2f = sorted(glob.glob(os.path.join(self.save_dir_jp2, '*.jp2')))
         # Parse filenames to get the actual image time
-        jp2_datetimes = [datetime_from_filename(filename) for filename in jp2f]
+        self.jp2_datetimes = [datetime_from_filename(filename).strftime(FILE_TIME_FORMAT) for filename in self.jp2f]
+        self.jp2_measurements = [inst_from_filename(filename) for filename in self.jp2f]
+        self.generic_filenames = [date + '__' + measurement for date, measurement in zip(self.jp2_datetimes, self.jp2_measurements)]
         # Get hek event times
-        _, self.hek_times = get_hek_result(self.tstart, self.tend)
+        if self.missed_downloads:
+            self.hek_times = self.missed_downloads.copy()
+        else:
+            print('Querying times to the HEK...')
+            _, self.hek_times = get_hek_result(self.tstart, self.tend)
         # Initialize the list of missed_downloads list that will contain any hek time entry that failed to download
         self.missed_downloads = []
+
+
+        downloaded_events = []
+        if os.path.isfile(self.hek_time_jp2_map_csv):
+            with open(self.hek_time_jp2_map_csv) as csvfile:
+                readcsv = csv.reader(csvfile, delimiter=',')
+                for row in readcsv:
+                    downloaded_events.append(row)
+            csvfile.close()
+
+        downloaded_event_times = [row[0] for row in downloaded_events]
+
         for i, time_in in enumerate(self.hek_times):
             # Check that we haven't already downloaded some data for that hek time.
             # Skip them if we did and download only the missing ones.
             hek_time = parse_time(time_in)
-            measurements = self.list_missing_measurements(hek_time, jp2f, jp2_datetimes)
 
-            if measurements:
+            if time_in not in downloaded_event_times: # TODO: Check instead a previous csv file to see if this hek time has been populated
                 print('Checking available data for hek time {:s} at index {:d}'.format(
                     hek_time.strftime('%Y/%m/%d %H:%M:%S'), i))
                 try:
-                    image_files, image_times = download_sdo_images(hek_time, measurements, dt=self.dt, save_path=self.save_dir)
+                    image_files, image_times = self.download_sdo_images(hek_time, self.measurements_req, dt=self.dt, save_path=self.save_dir_jp2)
+                    if len(image_files) < len(self.measurements_req):
+                        # That event is incomplete, must be rejected.
+                        print('Rejecting event (incomplete)')
+                        self.rejected_hek_events.append(hek_time)
+                    else:
+                        jp2_basenames = [os.path.basename(f) for f in image_files]
+                        downloaded_events.append([time_in] + jp2_basenames)
                 except ValueError:
+                    # This includes JSONDecodeError, occurs when something between the client and the server goes wrong.
+                    # This should be added to the missed download, which will be subject to new download attempts
+                    print('Exeption raised by helioviewer client. Appending to missed_downloads.')
                     self.missed_downloads.append(time_in)
                     continue
-                for measure_idx, fpath in enumerate(image_files):
-                    if fpath is None:
-                        print('...Skipped measurement {:s} at time {:s} (too far from hek time) '.format(measurements[measure_idx],
-                                                                                 image_times[measure_idx].strftime(
-                                                                                     '%Y_%m_%d %H:%M:%S')))
-                    else:
-                        print('...downloaded file(s) {:s}'.format(fpath))
+                # TODO: Catch also what's thrown by the helioviewer client when the json response does not contain a valid key
+                except KeyError:
+                    print('Helioviewer KeyError. Skipping.')
+                    # And these ones are just rubbish data, we must NOT attempt a new download
+                    continue
             else:
                 print('skipping already downloaded data for hek time {:s}'.format(
                     hek_time.strftime('%Y/%m/%d %H:%M:%S')))
 
+        # Chronological ordering of downloaded_events
+        downloaded_events.sort()
+
+
+        with open(self.hek_time_jp2_map_csv, 'w') as csvFile:
+            writer = csv.writer(csvFile)
+            writer.writerows(downloaded_events)
+        csvFile.close()
+
+
         if self.missed_downloads:
-            with open(self.missed_downloads_csv, 'w+') as csvFile:
+            with open(self.missed_downloads_csv, 'w') as csvFile:
                 writer = csv.writer(csvFile)
                 writer.writerows(self.missed_downloads)
             csvFile.close()
@@ -162,50 +180,84 @@ class Jp2ImageDownload:
         else:
             self.download_flag = False
 
+
+
+
         #self.data_cleanup()
         print('Finished download')
+
+
+    def download_sdo_images(self, time_in, measurements, dt, save_path=''):
+        """
+        Download a complete set of the SDO images in AIA and HMI for a given time, with optional tolerance on time difference
+
+        :param time_in: requested datetime for JP2 image download.
+        :param measurements: list of string of measurement names: AIA wavelength: '193', '94',... or HMI segment name: 'continuum' or 'magnetogram'
+        :param dt: time difference tolerated between requested time and available image time so that time_in - dt < actual image time < time_in + dt
+        :param save_path: save path for downloaded images
+        :return: full file path of example AIA image downloaded (335 channel). Set to None if time is off limits
+        """
+
+        hv = helioviewer.HelioviewerClient()
+
+        filepaths = []
+        image_times = []
+        for measure in measurements:
+            if measure is not 'continuum' and measure is not 'magnetogram':
+                kwargs = {'observatory': 'SDO', 'instrument': 'AIA', 'detector': 'AIA', 'measurement': measure}
+            else:
+                kwargs = {'observatory': 'SDO', 'instrument': 'HMI', 'detector': 'HMI', 'measurement': measure}
+
+            requested_file_measurement = '{:s}_{:s}_{:s}_{:s}'.\
+                format(kwargs['observatory'], kwargs['instrument'], kwargs['detector'], measure)
+
+            # Check how far requested time in metadata is from requested hek time
+            metadata = hv.get_closest_image(time_in, **kwargs)
+            image_time = metadata['date']
+            # Build the generic filename that match this
+            generic_fname = image_time.strftime(FILE_TIME_FORMAT) + '__' + requested_file_measurement
+
+            if generic_fname not in self.generic_filenames:
+                if time_in - dt < image_time < time_in + dt:
+                    filepath = hv.download_jp2(time_in, directory=save_path, overwrite=True, **kwargs)
+                    print('...downloaded file(s) {:s}'.format(filepath))
+                    filepaths.append(filepath)
+                else:
+                    # Do not download if actual image time is too far from requested time
+                    print('...Skipped measurement {:s} at time {:s} (too far from hek time) '.format(
+                        measure, image_time.strftime(TIME_FORMAT)))
+            else:
+                fidx = self.generic_filenames.index(generic_fname)
+                filepaths.append(self.jp2f[fidx])
+                print('...skipping already downloaded file with generic name: ' + generic_fname)
+
+            image_times.append(image_time)
+
+        return filepaths, image_times
 
 
     def data_cleanup(self):
         """
         Cleanup the downloaded image to have only complete groups in the training set
         """
+
+
         print('data cleanup...')
-        if self.hek_times is None:
-            _, self.hek_times = get_hek_result(self.tstart, self.tend)
-        hek_time_jp2_map = []
+
+        if not self.hek_time_jp2_map:
+            with open(self.hek_time_jp2_map_csv) as csvfile:
+                readcsv = csv.reader(csvfile, delimiter=',')
+                for row in readcsv:
+                    self.hek_time_jp2_map.append(row)
+            csvfile.close()
+
         # List the downloaded images
-        downloaded_files = sorted(glob.glob(os.path.join(self.save_dir, '*.jp2')))
-        # Parse filenames to get the actual image time
-        jp2_datetimes = [datetime_from_filename(filename) for filename in downloaded_files]
-        n_incomplete_groups = 0
-        rejected_hek_events = []
-        # Loop over all the hek times and test if we have all measurements after the download process
-        # Reject the whole group if that's not the case
-        for i, time_in in enumerate(self.hek_times):
-            hek_time = parse_time(time_in)
-            # Get the index of files whose time fall within a 1hr window centered on the hek event time
-            tmatches = [i for i, file_time in enumerate(jp2_datetimes) if hek_time - self.dt < file_time < hek_time + self.dt]
-            # Extract what instrument are these files coming from
-            file_inst_list = [os.path.basename(downloaded_files[t])[25:-4] for t in tmatches]
-            file_inst_match_list = [inst for inst in self.inst_file_map if inst in file_inst_list]
-            file_inst_match_list.sort()
-
-            if file_inst_match_list != self.inst_file_map:
-                n_incomplete_groups += 1
-                # Flag this hek event as having an incomplete number of files so as to ignore it later.
-                rejected_hek_events.append([self.hek_times.index(time_in), time_in])
-            else:
-                # Append all files of the group to the hek_time <-> jp2 map
-                jp2_basenames = [os.path.basename(downloaded_files[t]) for t in tmatches]
-                hek_time_jp2_map_entry = [time_in] + jp2_basenames
-                hek_time_jp2_map.append(hek_time_jp2_map_entry)
-
+        downloaded_files = sorted(glob.glob(os.path.join(self.save_dir_jp2, '*.jp2')))
         ## move the file present in the directory but that are not listed in hek_time_jp2_map.
         # list the valid files that have an entry in the hek time as a complete set
-        valid_sets = [row[1:] for row in hek_time_jp2_map]
+        valid_sets = [row[1:] for row in self.hek_time_jp2_map]
         # Need to unroll all of them in one single flat list, convert them back with a full path.
-        flat_valid_files = [os.path.join(self.save_dir, file) for file_set in valid_sets for file in file_set]
+        flat_valid_files = [os.path.join(self.save_dir_jp2, file) for file_set in valid_sets for file in file_set]
         # Now for each file in the directory that does not match any file in flat_valid_files, discard them
         for file in downloaded_files:
             if file not in flat_valid_files:
@@ -213,15 +265,15 @@ class Jp2ImageDownload:
 
 
         # Write hek_time_jp2_map to a csv file
-        with open(self.hek_time_jp2_map_csv, 'w+') as csvFile:
-            writer = csv.writer(csvFile)
-            writer.writerows(hek_time_jp2_map)
-        csvFile.close()
-        # Write the csv of rejected events
-        with open(self.rejected_hek_csv, 'w+') as csvFile:
-            writer = csv.writer(csvFile)
-            writer.writerows(rejected_hek_events)
-        csvFile.close()
+        # with open(self.hek_time_jp2_map_csv, 'w') as csvFile:
+        #     writer = csv.writer(csvFile)
+        #     writer.writerows(hek_time_jp2_map)
+        # csvFile.close()
+        # # Write the csv of rejected events
+        # with open(self.rejected_hek_csv, 'w') as csvFile:
+        #     writer = csv.writer(csvFile)
+        #     writer.writerows(rejected_hek_events)
+        # csvFile.close()
         print('data cleanup finished.')
 
 
@@ -233,24 +285,25 @@ class Jp2ImageDownload:
 
 
         # Get a list of existing files (if any)
-        jp2f = sorted(glob.glob(os.path.join(self.save_dir, '*.jp2')))
+        self.jp2f = sorted(glob.glob(os.path.join(self.save_dir_jp2, '*.jp2')))
         # Parse filenames to get the actual image time
-        jp2_datetimes = [datetime_from_filename(filename) for filename in jp2f]
+        jp2_datetimes = [datetime_from_filename(filename) for filename in self.jp2f]
         # Use the curated hek results from the cleanup pass instead of querying the hek again.
         # Otherwise this will use an uncurated list of hek times, and inconsistent map of jp2 <-> hek times
-        results, times = get_hek_result(self.tstart, self.tend)
+        results, _ = get_hek_result(self.tstart, self.tend)
         # Read the csv for rejected events
-        self.rejected_hek_events = []
-        with open(self.rejected_hek_csv) as csvfile:
-            readcsv = csv.reader(csvfile, delimiter=',')
-            for row in readcsv:
-                self.rejected_hek_events.append(row[1])
-        csvfile.close()
-        # Filter out the rejected events
-        for time in self.rejected_hek_events:
-            idx = times.index(time)
-            del results[idx]
-            del times[idx]
+        # self.rejected_hek_events = []
+        # with open(self.rejected_hek_csv) as csvfile:
+        #     readcsv = csv.reader(csvfile, delimiter=',')
+        #     for row in readcsv:
+        #         self.rejected_hek_events.append(row[1])
+        # csvfile.close()
+        # # Filter out the rejected events
+        # for time in self.rejected_hek_events:
+        #     idx = times.index(time)
+        #     # TODO: fix the inconsistent indexing between times and results
+        #     del results[idx]
+        #     del times[idx]
 
         # Read the mapping of hek times to jp2 files
         hek_time_jp2_map = []
@@ -260,6 +313,7 @@ class Jp2ImageDownload:
                 hek_time_jp2_map.append(row)
         csvfile.close()
 
+        times = [row[0] for row in hek_time_jp2_map]
 
         ch = [elem for elem in results if elem['event_type'] == 'CH']
         ar = [elem for elem in results if elem['event_type'] == 'AR']
@@ -274,7 +328,7 @@ class Jp2ImageDownload:
 
             # Get closest image
             nearest_datetime = nearest(jp2_datetimes, hek_time)
-            nearest_file = jp2f[jp2_datetimes.index(nearest_datetime)]
+            nearest_file = self.jp2f[jp2_datetimes.index(nearest_datetime)]
             print('...processing hek time: {:s} at index {:d} '.format(hek_time.strftime('%Y/%m/%d %H:%M:%S'), i))
             print('......using nearest image at time: {:s}'.format(nearest_datetime.strftime('%Y/%m/%d %H:%M:%S')))
             # Extract metadata for each class and at the specific date time_in
@@ -295,19 +349,21 @@ class Jp2ImageDownload:
                 mask_time_map.append([os.path.basename(ss_file_path), time_in] + jp2f_at_hek_time)
                 self.blank_hek_events += ss_blanks
 
+        # Write mask_time_map to a csv file
+        with open(self.mask_hek_time_map_csv, 'w') as csvFile:
+            writer = csv.writer(csvFile)
+            writer.writerows(mask_time_map)
+        csvFile.close()
+
         # Create the csv file that will contain the "blank" hek events, i.e, event that have a hek entry but no
         # hpc_boundcc coordinates
-        with open(self.blank_hek_events_csv, 'w+') as outcsv:
+        with open(self.blank_hek_events_csv, 'w') as outcsv:
             writer = csv.writer(outcsv)
             writer.writerow(['frm_specificid', 'event_starttime'])
             writer.writerows(self.blank_hek_events)
         outcsv.close()
 
-        # Write mask_time_map to a csv file
-        with open(self.mask_hek_time_map_csv, 'w+') as csvFile:
-            writer = csv.writer(csvFile)
-            writer.writerows(mask_time_map)
-        csvFile.close()
+
 
 
 def gen_label_mask(label_list, image_filepath, hek_time, label, save_path=None, do_plot=False):
@@ -349,7 +405,6 @@ def gen_label_mask(label_list, image_filepath, hek_time, label, save_path=None, 
         p2 = p1.split(',')
         p3 = [v.split(" ") for v in p2]
         print(labels["hpc_boundcc"])
-        #TODO: must take into account the events where hpc_boundcc is blank or cannot give us a polygon.
         if len(p3) > 2:
             # Convert coordinates of polygon vertices from helioprojective cartesian (HPC) to pixel "image" coordinates.
             boundary_coords = SkyCoord([(float(v[0]), float(v[1])) * u.arcsec for v in p3], frame=aia_map.coordinate_frame)
@@ -369,6 +424,7 @@ def gen_label_mask(label_list, image_filepath, hek_time, label, save_path=None, 
     # In the very rare case where the HPC coordinates of all elements in the hek result are blank, raise that specifically to let us know.
     if len(blank_hek_elems) == len(label_list):
         raise Exception('All elements at hek_time {:s} are blank for label {:s}'.format(hek_time.strftime(TIME_FORMAT), label))
+        # TODO: handle such error in a non-interruptive manner.
 
     mask_file_path = write_mask(mask, hek_time, label, save_path=save_path)
 
@@ -387,15 +443,20 @@ def gen_label_mask(label_list, image_filepath, hek_time, label, save_path=None, 
     return mask, mask_file_path, blank_hek_elems
 
 
-
-
-
 def datetime_from_filename(filepath):
-    basename = os.path.basename(filepath)[0:20]
+    basename = os.path.basename(filepath)
     file_time_str= basename[:4] + '-' + basename[5:7] + '-' + basename[8:10] + 'T' + basename[12:14] + ':' + basename[15:17] \
                + ':' + basename[18:20]
     file_datetime = parse_time(file_time_str)
     return file_datetime
+
+
+def inst_from_filename(filepath):
+    basename = os.path.basename(filepath)
+    idx = basename.index('SDO')
+    inst_str = basename[idx:-4]
+    return inst_str
+
 
 
 def get_hek_result(time_start, time_end):
@@ -406,45 +467,6 @@ def get_hek_result(time_start, time_end):
     times.sort()
     return results, times
 
-
-def download_sdo_images(time_in, measurements, dt, save_path=''):
-    """
-    Download a complete set of the SDO images in AIA and HMI for a given time, with optional tolerance on time difference
-
-    :param time_in: requested datetime for JP2 image download.
-    :param measurements: list of string of measurement names: AIA wavelength: '193', '94',... or HMI segment name: 'continuum' or 'magnetogram'
-    :param dt: time difference tolerated between requested time and available image time so that time_in - dt < actual image time < time_in + dt
-    :param save_path: save path for downloaded images
-    :return: full file path of example AIA image downloaded (335 channel). Set to None if time is off limits
-    """
-
-    hv = helioviewer.HelioviewerClient()
-
-    filepaths = []
-    image_times = []
-    for measure in measurements:
-        if measure is not 'continuum' and measure is not 'magnetogram':
-            kwargs = {'observatory': 'SDO', 'instrument': 'AIA', 'detector': 'AIA', 'measurement': measure}
-        else:
-            kwargs = {'observatory': 'SDO', 'instrument': 'HMI', 'detector': 'HMI', 'measurement': measure}
-
-        if dt is not None:
-            # Check how far requested time in metadata is from requested hek time
-            metadata = hv.get_closest_image(time_in, **kwargs)
-            image_time = metadata['date']
-            if time_in - dt < image_time < time_in + dt:
-                filepath = hv.download_jp2(time_in, directory=save_path, **kwargs)
-            else:
-                # Do not download if actual image time is too far from requested time
-                filepath = None
-        else:
-            image_time = None
-            filepath = hv.download_jp2(time_in, directory=save_path, **kwargs)
-
-        filepaths.append(filepath)
-        image_times.append(image_time)
-
-    return filepaths, image_times
 
 
 def get_header(filepath):

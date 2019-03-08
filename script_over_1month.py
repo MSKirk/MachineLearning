@@ -16,6 +16,6 @@ while j.download_flag:
 j.data_cleanup()
 
 # Test the creation of label-masks
-j.make_labels()
+#j.make_labels()
 
 
