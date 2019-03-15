@@ -149,7 +149,7 @@ class Jp2ImageDownload:
                 except ValueError:
                     # This includes JSONDecodeError, occurs when something between the client and the server goes wrong.
                     # This should be added to the missed download, which will be subject to new download attempts
-                    print('Exeption raised by helioviewer client. Appending to missed_downloads.')
+                    print('Exception raised by helioviewer client. Appending to missed_downloads.')
                     self.missed_downloads.append(time_in)
                     continue
                 # TODO: Catch also what's thrown by the helioviewer client when the json response does not contain a valid key
