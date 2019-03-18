@@ -86,7 +86,8 @@ class Jp2ImageDownload:
         self.rejected_hek_events = []
         self.missed_downloads = []
         self.blank_hek_events = []
-        self.download_flag = True
+        self.missed_downloads_flag = True
+        self.missed_labels_flag = True
         self.do_plot = True
 
         matplotlib.rcParams.update({'font.size': 18})
@@ -155,11 +156,12 @@ class Jp2ImageDownload:
                     # This should be added to the missed download, which will be subject to new download attempts
                     print('Exception raised by helioviewer client. Appending to missed_downloads.')
                     self.missed_downloads.append(time_in)
-                    logger.debug('Helioviewer download request raised urllib.error.HTTPError')
+                    logger.info('Helioviewer server error at hek time: {:s}'.format(time_in))
+                    #TODO: wait a little bit
                     continue
-                # TODO: Catch also what's thrown by the helioviewer client when the json response does not contain a valid key
                 except KeyError:
                     print('Helioviewer KeyError. Skipping.')
+                    logger.info('Helioviewer key error at hek time: {:s}'.format(time_in))
                     # And these ones are just rubbish data, we must NOT attempt a new download
                     continue
             else:
@@ -175,16 +177,16 @@ class Jp2ImageDownload:
             writer.writerows(downloaded_events)
         csvFile.close()
 
-
+        # Only write the list of last missed downloads.
         if self.missed_downloads:
             with open(self.missed_downloads_csv, 'w') as csvFile:
                 writer = csv.writer(csvFile)
                 for elem in self.missed_downloads:
                     writer.writerow([elem])
             csvFile.close()
-            self.download_flag = True
+            self.missed_downloads_flag = True
         else:
-            self.download_flag = False
+            self.missed_downloads_flag = False
 
 
 
@@ -296,20 +298,8 @@ class Jp2ImageDownload:
         jp2_datetimes = [datetime_from_filename(filename) for filename in self.jp2f]
         # Use the curated hek results from the cleanup pass instead of querying the hek again.
         # Otherwise this will use an uncurated list of hek times, and inconsistent map of jp2 <-> hek times
+
         results, _ = get_hek_result(self.tstart, self.tend)
-        # Read the csv for rejected events
-        # self.rejected_hek_events = []
-        # with open(self.rejected_hek_csv) as csvfile:
-        #     readcsv = csv.reader(csvfile, delimiter=',')
-        #     for row in readcsv:
-        #         self.rejected_hek_events.append(row[1])
-        # csvfile.close()
-        # # Filter out the rejected events
-        # for time in self.rejected_hek_events:
-        #     idx = times.index(time)
-        #     # TODO: fix the inconsistent indexing between times and results
-        #     del results[idx]
-        #     del times[idx]
 
         # Read the mapping of hek times to jp2 files
         hek_time_jp2_map = []
@@ -368,6 +358,8 @@ class Jp2ImageDownload:
             writer.writerow(['frm_specificid', 'event_starttime'])
             writer.writerows(self.blank_hek_events)
         outcsv.close()
+
+        self.missed_labels_flag = False
 
 
 
