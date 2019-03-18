@@ -17,9 +17,11 @@ if __name__ == '__main__':
     # SHOULDN'T NEED TO CHANGE ANYTHING BELOW THIS --------->>
 
     begin_list = [dt for dt in rrule(MONTHLY, dtstart=parse_time(start_date), until=parse_time(end_date))]
-    end_list = [ii - datetime.timedelta(minutes=30) for ii in begin_list]
+    end_list = [elem - datetime.timedelta(minutes=30) for elem in begin_list[1:]]
+    del begin_list[-1]
 
-    for tstart, tend in zip(begin_list[:-1], end_list[1:]):
+
+    for tstart, tend in zip(begin_list, end_list):
 
         j = Jpd.Jp2ImageDownload(save_dir, tstart=tstart, tend=tend)
 

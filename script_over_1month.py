@@ -4,7 +4,7 @@ import logging
 
 if __name__ == '__main__':
 
-    save_dir = os.path.join(os.path.expanduser('~'), 'Data/michael/MachineLearning/Hek_project/')
+    save_dir = os.path.abspath('/Volumes/RAPH_1TB/Data/Michael/Hek_project')
 
     tstart = '2017/04/01 00:00:00'
     tend = '2017/04/30 23:30:00'

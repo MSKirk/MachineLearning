@@ -1,6 +1,7 @@
 import os
 import JP2_Image_Download as Jpd
 from dateutil.rrule import rrule, MONTHLY
+import datetime
 from sunpy.time import parse_time
 import logging
 
@@ -8,8 +9,13 @@ import logging
 if __name__ == '__main__':
 
     save_dir = os.path.abspath('/Volumes/RAPH_1TB/Data/Michael/Hek_project')
-    begin_list = [dt for dt in rrule(MONTHLY, dtstart=parse_time('2016/07/01 00:00:00') , until=parse_time('2019/02/01 00:00:00'))]
-    end_list = [dt for dt in rrule(MONTHLY, dtstart=parse_time('2016/07/30 23:30:00') , until=parse_time('2019/02/28 23:30:00'))]
+    start_date = '2017/04/01 00:00:00'  # inclusive
+    end_date = '2019/02/01 00:00:00'  # not inclusive
+
+
+    begin_list = [dt for dt in rrule(MONTHLY, dtstart=parse_time(start_date), until=parse_time(end_date))]
+    end_list = [elem - datetime.timedelta(minutes=30) for elem in begin_list[1:]]
+    del begin_list[-1]
 
     for tstart, tend in zip(begin_list, end_list):
 
