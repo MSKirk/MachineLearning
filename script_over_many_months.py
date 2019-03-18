@@ -1,17 +1,24 @@
 import os
 import JP2_Image_Download as Jpd
-from dateutil.rrule import rrule, MONTHLY 
+from dateutil.rrule import rrule, MONTHLY
+import datetime
 from sunpy.time import parse_time
 import logging  
 
 
+# SET THESE PARAMETERS
+
 #save_dir = os.path.join(os.path.expanduser('~'), 'Data/michael/MachineLearning/Hek_project/')
 save_dir = os.path.abspath('/Volumes/SolarData/LabledImages')
 
-begin_list = [dt for dt in rrule(MONTHLY, dtstart=parse_time('2010/07/01 00:00:00') , until=parse_time('2013/05/31 23:30:00'))] 
-end_list = [dt for dt in rrule(MONTHLY, dtstart=parse_time('2010/07/31 23:30:00') , until=parse_time('2013/05/31 23:30:00'))] 
+start_date = '2010/06/01 00:00:00'  # inclusive
+end_date = '2013/06/01 00:00:00'  # not inclusive
 
-for tstart, tend in zip(begin_list, end_list):
+# SHOULDN'T NEED TO CHANGE BELOW THIS
+begin_list = [dt for dt in rrule(MONTHLY, dtstart=parse_time(start_date), until=parse_time(end_date))]
+end_list = [ii - datetime.timedelta(minutes=30) for ii in begin_list]
+
+for tstart, tend in zip(begin_list[:-1], end_list[1:]):
 
     j = Jpd.Jp2ImageDownload(save_dir, tstart=tstart, tend=tend)
     logging.basicConfig(format='%(asctime)s %(message)s', filename=os.path.join(j.save_dir, 'logger.log'), level=logging.DEBUG)
