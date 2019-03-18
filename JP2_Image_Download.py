@@ -18,6 +18,10 @@ from datetime import timedelta
 import os, glob, shutil
 from mahotas.polygon import fill_polygon
 import csv
+import urllib
+import logging
+
+logger = logging.getLogger(__name__)
 
 TIME_FORMAT = '%Y/%m/%d %H:%M:%S'
 FILE_TIME_FORMAT = '%Y_%m_%dT%H_%M_%S'
@@ -142,15 +146,16 @@ class Jp2ImageDownload:
                     if len(image_files) < len(self.measurements_req):
                         # That event is incomplete, must be rejected.
                         print('Rejecting event (incomplete)')
-                        self.rejected_hek_events.append(hek_time)
+                        self.rejected_hek_events.append(time_in)
                     else:
                         jp2_basenames = [os.path.basename(f) for f in image_files]
                         downloaded_events.append([time_in] + jp2_basenames)
-                except ValueError:
+                except (ValueError, urllib.error.HTTPError):
                     # This includes JSONDecodeError, occurs when something between the client and the server goes wrong.
                     # This should be added to the missed download, which will be subject to new download attempts
                     print('Exception raised by helioviewer client. Appending to missed_downloads.')
                     self.missed_downloads.append(time_in)
+                    logger.debug('Helioviewer download request raised urllib.error.HTTPError')
                     continue
                 # TODO: Catch also what's thrown by the helioviewer client when the json response does not contain a valid key
                 except KeyError:
@@ -174,7 +179,8 @@ class Jp2ImageDownload:
         if self.missed_downloads:
             with open(self.missed_downloads_csv, 'w') as csvFile:
                 writer = csv.writer(csvFile)
-                writer.writerows(self.missed_downloads)
+                for elem in self.missed_downloads:
+                    writer.writerow([elem])
             csvFile.close()
             self.download_flag = True
         else:
