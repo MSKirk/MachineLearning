@@ -234,6 +234,8 @@ class Jp2ImageDownload:
                     # Do not download if actual image time is too far from requested time
                     print('...Skipped measurement {:s} at time {:s} (too far from hek time) '.format(
                         measure, image_time.strftime(TIME_FORMAT)))
+                    logger.info('skipped measurement {:s} at time {:s} too far from hek time {:s} '.format(
+                        measure, image_time.strftime(TIME_FORMAT), time_in.strftime(TIME_FORMAT)))
             else:
                 fidx = self.generic_filenames.index(generic_fname)
                 filepaths.append(self.jp2f[fidx])
