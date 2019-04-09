@@ -61,8 +61,7 @@ parent_dir2 = parent_dir
 # Filename of csv file that will be the aggregation all csv files of all YEAR_MONTH subdirectories without duplicates
 global_csv_file = os.path.join(parent_dir, 'label_jp2_map_global.csv')
 
-#######################################################################################
-
+######### (1) Creating the aggregated map of jp2 and label masks ###########
 
 # Fetch the csv file paths recursively
 csv_files = sorted(glob.glob(os.path.join(parent_dir, '20*/label_jp2_map.csv')))
@@ -79,7 +78,10 @@ headers = ['npz file', 'HEK time', 'jp2 AIA 1600', 'jp2 AIA 1700', 'jp2 AIA 94',
 # Write the new dataframe to a csv file
 label_jp2_map_global.to_csv(global_csv_file, index=False, header=headers)
 
-### Move the files to a common directory
+
+
+######### (2) Move the files to a common directory #########
+
 jp2_dir = os.path.join(parent_dir2, 'jp2')
 labels_dir = os.path.join(parent_dir2, 'label_masks')
 png_dir = os.path.join(labels_dir, 'png')
