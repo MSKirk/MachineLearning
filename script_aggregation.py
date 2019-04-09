@@ -1,4 +1,6 @@
-""" Aggregation script
+""" Aggregation script.
+
+Maintained at https://github.com/MSKirk/MachineLearning/blob/master/script_aggregation.py
 
 Merges the content of the csv files of all YEAR_MONTH subdirectories into a single "global" csv file (global_csv_file)
 and move all files to a common jp2 and labels subdirectory without duplicates.
