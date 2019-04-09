@@ -1,8 +1,10 @@
 """ Aggregation script
 
-Merges all csv files of all YEAR_MONTH subdirectories into a single one and move all files
-to a common jp2 and labels subdirectory without duplicates.
-User must update parent_dir, parent_dir2 and global_csv_file to user personal case.
+Merges the content of the csv files of all YEAR_MONTH subdirectories into a single "global" csv file (global_csv_file)
+and move all files to a common jp2 and labels subdirectory without duplicates.
+User must update parent_dir, parent_dir2 and global_csv_file to personal case.
+Note that depending on how you got the data, you may already have the global csv file under parent_dir.
+It will be overwritten upon execution of this script, unless its path (global_csv_file) is changed.
 
 Given a parent_directory hosting the original data (parent_dir):
 
@@ -17,6 +19,8 @@ parent_dir
     2019_01
         jp2
         labels_masks
+    empty_sets (please ignore this)
+    label_jp2_map_global.csv
 
 Upon completion of this script we end up for a parent directory hosting the moved duplicate-free data (parent_dir2):
 
@@ -33,6 +37,9 @@ original directories.
 In case no backup is made, 2 conveniency csv files are created to move the data back to the original directory tree,
 if ever needed.
 
+This script is of course optional as long as you can map properly map the data in all subdirectories in a way that accounts
+for the duplicates across consecutive months.
+
 Authors: Dr. Raphael Attie (raphael.attie@nasa.gov) & Dr. Michael Kirk (michael.s.kirk@nasa.gov)
 """
 
@@ -45,7 +52,7 @@ import csv
 
 #############   Set some data directories - update to your personal case  #############
 
-# Parent directory of all YEAR_MONTH subdirectories
+# Parent directory of all YEAR_MONTH subdirectories that will also contain the global csv file
 parent_dir = '/Volumes/SolarData/LabeledImages/'
 # Common directory where all files will be moved, without duplicates.
 parent_dir2 = parent_dir
