@@ -195,13 +195,13 @@ class Jp2ImageDownload:
         print('Finished download')
 
 
-    def download_sdo_images(self, time_in, measurements, dt, save_path=''):
+    def download_sdo_images(self, hek_time, measurements, dt, save_path=''):
         """
         Download a complete set of the SDO images in AIA and HMI for a given time, with optional tolerance on time difference
 
-        :param time_in: requested datetime for JP2 image download.
+        :param hek_time: requested datetime for JP2 image download.
         :param measurements: list of string of measurement names: AIA wavelength: '193', '94',... or HMI segment name: 'continuum' or 'magnetogram'
-        :param dt: time difference tolerated between requested time and available image time so that time_in - dt < actual image time < time_in + dt
+        :param dt: time difference tolerated between requested time and available image time so that hek_time - dt < actual image time < hek_time + dt
         :param save_path: save path for downloaded images
         :return: full file path of example AIA image downloaded (335 channel). Set to None if time is off limits
         """
@@ -220,14 +220,14 @@ class Jp2ImageDownload:
                 format(kwargs['observatory'], kwargs['instrument'], kwargs['detector'], measure)
 
             # Check how far requested time in metadata is from requested hek time
-            metadata = hv.get_closest_image(time_in, **kwargs)
+            metadata = hv.get_closest_image(hek_time, **kwargs)
             image_time = metadata['date']
             # Build the generic filename that match this
             generic_fname = image_time.strftime(FILE_TIME_FORMAT) + '__' + requested_file_measurement
 
             if generic_fname not in self.generic_filenames:
-                if time_in - dt < image_time < time_in + dt:
-                    filepath = hv.download_jp2(time_in, directory=save_path, overwrite=True, **kwargs)
+                if hek_time - dt < image_time < hek_time + dt:
+                    filepath = hv.download_jp2(hek_time, directory=save_path, overwrite=True, **kwargs)
                     print('...downloaded file(s) {:s}'.format(filepath))
                     filepaths.append(filepath)
                 else:
@@ -235,7 +235,7 @@ class Jp2ImageDownload:
                     print('...Skipped measurement {:s} at time {:s} (too far from hek time) '.format(
                         measure, image_time.strftime(TIME_FORMAT)))
                     logger.info('skipped measurement {:s} at time {:s} too far from hek time {:s} '.format(
-                        measure, image_time.strftime(TIME_FORMAT), time_in.strftime(TIME_FORMAT)))
+                        measure, image_time.strftime(TIME_FORMAT), hek_time.strftime(TIME_FORMAT)))
             else:
                 fidx = self.generic_filenames.index(generic_fname)
                 filepaths.append(self.jp2f[fidx])
