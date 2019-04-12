@@ -1,6 +1,6 @@
 # MachineLearning
 
-## Extracting and Analysing Solar Features With A.I
+## Extracting and Analysing Solar Features With A.I.
 
 ![Coronal hole masked viewed by the HEK](images/2012_07_08__07_34_15_63__SDO_AIA_AIA_335_plot_CH.png)
 
@@ -12,9 +12,15 @@ Michael Kirk and Raphael Attie @ NASA/GSFC :-)
 
 ## Acknowledgements: 
 
-SDO AIA & HMI team:
-- https://sdo.gsfc.nasa.gov/mission/science.php
-![SDO spacecraft](images/sdo_aia_anim.jpg)
+- SDO, AIA & HMI JSOC team and LMSAL:
+    - https://sdo.gsfc.nasa.gov/mission/science.php
+    ![SDO spacecraft](images/sdo_aia_anim.jpg)
 
-- The HEK of a team at the Royal Observatory of Belgium (ROB)
+    - http://jsoc.stanford.edu/
+
+    - https://www.lmsal.com/
+
+- The HEK of a team at the Royal Observatory of Belgium ([ROB](https://www.astro.oma.be/en/))
 ![ROB & USET telescope dome](images/PANO_20160924_143315.jpg)
+
+- JPEG2000 files provided by the ESA and NASA funded [Helioviewer project](https://www.helioviewer.org/)
