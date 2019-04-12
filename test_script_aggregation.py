@@ -2,14 +2,13 @@
 
 Maintained at https://github.com/MSKirk/MachineLearning/blob/master/script_aggregation.py
 
-(1) Merges the content of the csv files found in all YEAR_MONTH subdirectories into a single global_csv_file.
-This file will map all jp2 to their labels without any overlaps. This csv only map file basenames.
+Merges the content of the csv files of all YEAR_MONTH subdirectories into a single "global" csv file (global_csv_file)
+and move all files to a common jp2 and labels subdirectory without duplicates.
+User must update parent_dir, parent_dir2 and global_csv_file to personal case.
+Note that depending on how you got the data, you may already have the global csv file under parent_dir.
+It will be overwritten upon execution of this script, unless its path (global_csv_file) is changed.
 
-(2) This script also creates csv files mapping relative YEAR_MONTH-based file path to new common jp2 and labels directory
-directly under a new  parent directory. You may this e.g. for moving the files into a new more "global" tree.
-
-E.g: given a parent directory "parent_dir" hosting the original data tree (parent_dir),
-the csv file will map everything in
+Given a parent_directory hosting the original data (parent_dir):
 
 parent_dir
     2010_12
@@ -25,34 +24,38 @@ parent_dir
     empty_sets (please ignore this)
     label_jp2_map_global.csv
 
-to a more global duplicate-free data tree under another user-defined directory parent_dir2:
+Upon completion of this script we end up for a parent directory hosting the moved duplicate-free data (parent_dir2):
 
 parent_dir2
     jp2
     labels_masks
     global_csv_file
 
+Where global_csv_file is the aggregated csv file without duplicated file paths.
 
-User must update parent_dir, parent_dir2 and global_csv_file to personal case.
-Note that depending on how you got the data, you may already have these csv files created for you.
+Note that this script is non-destructive and will only move data without deleting the duplicated files left in the
+original directories.
 
-This script is of course optional as long as you can map the data in all subdirectories in a way that accounts
-for the events overlapping end-beginning of consecutive months.
+In case no backup is made, 2 conveniency csv files are created to move the data back to the original directory tree,
+if ever needed.
 
-Authors:
-Dr. Raphael Attie and Dr. Michael S. Kirk at NASA/GSFC
+This script is of course optional as long as you can map properly map the data in all subdirectories in a way that accounts
+for the duplicates across consecutive months.
+
+Authors: Dr. Raphael Attie (raphael.attie@nasa.gov) & Dr. Michael Kirk (michael.s.kirk@nasa.gov)
 """
 
 import os
 import glob
 import pandas as pd
+import shutil
 import csv
 
 
 #############   Set some data directories - update to your personal case  #############
 
 # Parent directory of all YEAR_MONTH subdirectories that will also contain the global csv file
-parent_dir = '/Volumes/SolarData/LabeledImages/'
+parent_dir = '/Users/rattie/temp/'#'/Volumes/SolarData/LabeledImages/'
 # Common directory where all files will be moved, without duplicates.
 parent_dir2 = parent_dir
 # Filename of csv file that will be the aggregation all csv files of all YEAR_MONTH subdirectories without duplicates
@@ -61,7 +64,8 @@ global_csv_file = os.path.join(parent_dir, 'label_jp2_map_global.csv')
 ######### (1) Creating the aggregated map of jp2 and label masks ###########
 
 # Fetch the csv file paths recursively
-csv_files = sorted(glob.glob(os.path.join(parent_dir, '20*/label_jp2_map.csv')))
+#csv_files = sorted(glob.glob(os.path.join(parent_dir, '20*/label_jp2_map.csv')))
+csv_files = sorted(glob.glob(os.path.join(parent_dir, 'temp*/label_jp2_map.csv')))
 # Read their content and concatenate in a unique dataframe
 dfs = []
 for csvf in csv_files:
@@ -72,6 +76,10 @@ for csvf in csv_files:
 label_jp2_map_global = pd.concat(dfs).drop_duplicates().reset_index(drop=True)
 headers = ['npz file', 'HEK time', 'jp2 AIA 1600', 'jp2 AIA 1700', 'jp2 AIA 94', 'jp2 AIA 131', 'jp2 AIA 171',
            'jp2 AIA 193', 'jp2 AIA 211', 'jp2 AIA 304', 'jp2 AIA 335', 'jp2 HMI continuum', 'jp2 HMI magnetogram']
+
+# Concatenate file basename with their parent directory relative path
+
+
 # Write the new dataframe to a csv file
 label_jp2_map_global.to_csv(global_csv_file, index=False, header=headers)
 
@@ -86,9 +94,20 @@ jp2_dir = os.path.join(parent_dir2, 'jp2')
 labels_dir = os.path.join(parent_dir2, 'label_masks')
 png_dir = os.path.join(labels_dir, 'png')
 
+# if not os.path.exists(jp2_dir):
+#     os.makedirs(jp2_dir)
+#
+# if not os.path.exists(labels_dir):
+#     os.makedirs(labels_dir)
+#
+# if not os.path.exists(png_dir):
+#     os.makedirs(png_dir)
+
 # Paths to original files
-jp2f = sorted(glob.glob(os.path.join(parent_dir2, '20*/jp2/*.jp2')))
-labels = sorted(glob.glob(os.path.join(parent_dir2, '20*/label_masks/*.*')))
+# jp2f = sorted(glob.glob(os.path.join(parent_dir2, '20*/jp2/*.jp2')))
+# labels = sorted(glob.glob(os.path.join(parent_dir2, '20*/label_masks/*.*')))
+jp2f = sorted(glob.glob(os.path.join(parent_dir, 'temp*/jp2/*.jp2')))
+labels = sorted(glob.glob(os.path.join(parent_dir, 'temp*/label_masks/*.*')))
 
 # List of original file paths free of duplicates to register in csv files
 jp2f_list = []
@@ -106,9 +125,10 @@ for file in jp2f:
         original_file_relative = os.path.relpath(file, parent_dir)
         new_file_relative = os.path.relpath(new_file, parent_dir2)
         jp2f_list.append([original_file_relative, new_file_relative])
+        #shutil.move(file, jp2_dir)
         new_files.append(new_file)
 
-# Write the csv file mapping the jp2 YEAR_MONTH-based path to new common directory
+
 with open(jp2f_csv, 'w') as csvFile:
     writer = csv.writer(csvFile)
     writer.writerows(jp2f_list)
@@ -126,10 +146,11 @@ for file in labels:
     print(new_file)
     new_file_relative = os.path.relpath(new_file, parent_dir)
     if not new_file in new_files:
-        labels_list.append([original_file_relative, new_file_relative])
+        labels_list.append([new_file, file])
+        #shutil.move(file, new_file)
         new_files.append(new_file)
 
-# Create the restore csv of .npz files (including png files) mapping the .npz and png YEAR_MONTH-based path to new common directory
+# Create the restore csv of .npz files (including png files) to move back to original paths if needed
 with open(labels_csv, 'w') as csvFile:
     writer = csv.writer(csvFile)
     writer.writerows(labels_list)
