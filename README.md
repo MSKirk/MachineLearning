@@ -24,3 +24,4 @@ Michael Kirk and Raphael Attie @ NASA/GSFC :-)
 ![ROB & USET telescope dome](images/PANO_20160924_143315.jpg)
 
 - JPEG2000 files provided by the ESA and NASA funded [Helioviewer project](https://www.helioviewer.org/)
+![helioviewer](images/helioviewer.png)
