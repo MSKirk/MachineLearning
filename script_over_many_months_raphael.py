@@ -8,6 +8,7 @@ import logging
 
 if __name__ == '__main__':
 
+    # Update to your own case
     save_dir = os.path.abspath('/Volumes/RAPH_1TB/Data/Michael/Hek_project')
     start_date = '2018/05/01 00:00:00'  # inclusive
     end_date = '2019/02/01 00:00:00'  # not inclusive
