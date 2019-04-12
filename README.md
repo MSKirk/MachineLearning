@@ -19,6 +19,7 @@ Michael Kirk and Raphael Attie @ NASA/GSFC :-)
     - http://jsoc.stanford.edu/
 
 - Heliophysics Event Knowledgebase (aka HEK), Lockheed Martin Solar Applications Laboratory ([LMSAL](https://www.lmsal.com/))
+
 - Feature detection and labeling algorithms by one HEK of a team at the Royal Observatory of Belgium ([ROB](https://www.astro.oma.be/en/))
 ![ROB & USET telescope dome](images/PANO_20160924_143315.jpg)
 
