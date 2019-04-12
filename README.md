@@ -6,7 +6,7 @@
 
 ## Authors: 
 
-Michael Kirk and Raphael Attie @ NASA/GSFC :-)
+Michael Kirk and Raphael Attie @ NASA/GSFC
 
 ![yeah that's supposed to be a photo of us (not really) working](images/IMG_3552.jpg)
 
