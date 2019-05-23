@@ -16,16 +16,18 @@ def read_solar_jp2(filepath, verbose=False):
     if img.header['CROTA2'] != 0:
         if verbose:
             print('Rotating image to solar north')
-        data = calibration.scale_rotate(img.data, img.header['CROTA2'])
+        prepped_data = calibration.scale_rotate(img.data, img.header['CROTA2'])
     else:
-        data = img.data
+        prepped_data = img.data
 
     if verbose:
         print('Correcting for CCD degradation')
 
-    data /= aia_effective_area.effective_area_ratio(img.header['WAVELNTH']*u.AA, time.Time(img.header['DATE-OBS']).to_datetime())
+    prepped_data /= aia_effective_area.effective_area_ratio(img.header['WAVELNTH']*u.AA, time.Time(img.header['DATE-OBS']).to_datetime())
 
-    return data
+
+
+    return prepped_data
 
 
 
