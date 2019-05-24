@@ -45,7 +45,7 @@ def read_solar_jp2(filepath, verbose=False):
     non_zero = np.count_nonzero(prepped_data != 0)
 
     if img.header['WAVELNTH'] in [94, 131, 171, 193, 211, 304, 335]:
-        if (prepped_data.size - non_zero) / non_zero > 0.5:
+        if (prepped_data.size - non_zero) / non_zero > 0.6:
             warnings.warn('Significant amount of data missing in the image', UserWarning)
     else:
         if (prepped_data.size - non_zero) / non_zero > 1.2:
