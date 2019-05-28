@@ -330,8 +330,8 @@ class Jp2ImageDownload:
             print('...processing hek time: {:s} at index {:d} '.format(hek_time.strftime('%Y/%m/%d %H:%M:%S'), i))
             print('......using nearest image at time: {:s}'.format(nearest_datetime.strftime('%Y/%m/%d %H:%M:%S')))
             # Extract metadata for each class and at the specific date time_in
-            ch_list = [elem for elem in ch if elem['event_starttime'] == time_in]
-            ar_list = [elem for elem in ar if elem['event_starttime'] == time_in]
+            ch_list = [elem for elem in ch if elem['event_endtime'] == time_in]
+            ar_list = [elem for elem in ar if elem['event_endtime'] == time_in]
             ss_list = [elem for elem in ss if elem['event_starttime'] == time_in]
             # The above 3 lists have typically only 1 that's not empty. Let's explicitly tell to not process any empty label list.
             if ch_list:
@@ -458,15 +458,16 @@ def inst_from_filename(filepath):
     return inst_str
 
 
-
 def get_hek_result(time_start, time_end):
     client = hek.HEKClient()
     results = client.search(hek.attrs.Time(time_start, time_end), hek.attrs.FRM.Name == 'SPoCA')  # CH and AR
-    results += client.search(hek.attrs.Time(time_start, time_end), hek.attrs.FRM.Name == 'EGSO_SFC')  # SS
-    times = list(set([elem["event_starttime"] for elem in results]))
+    times = list(set([elem["event_endtime"] for elem in results]))
+
+    ss_results = client.search(hek.attrs.Time(time_start, time_end), hek.attrs.FRM.Name == 'EGSO_SFC')  # SS
+    results += ss_results
+    times += list(set([elem["event_starttime"] for elem in ss_results]))
     times.sort()
     return results, times
-
 
 
 def get_header(filepath):
