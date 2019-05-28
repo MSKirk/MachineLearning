@@ -8,6 +8,7 @@ from sunpy.io import read_file_header
 from sunpy.map import Map
 import astropy.units as u
 from astropy.coordinates import SkyCoord
+import glymur
 
 import numpy as np
 
@@ -324,7 +325,7 @@ class Jp2ImageDownload:
             # Get all jp2 files that map to that hek time
             jp2f_at_hek_time = hek_time_jp2_map[i][1:]
 
-            # Get closest image
+            # Get closest image file, we will just be using its header to build a sunpy map
             nearest_datetime = nearest(jp2_datetimes, hek_time)
             nearest_file = self.jp2f[jp2_datetimes.index(nearest_datetime)]
             print('...processing hek time: {:s} at index {:d} '.format(hek_time.strftime('%Y/%m/%d %H:%M:%S'), i))
@@ -366,7 +367,7 @@ class Jp2ImageDownload:
 
 
 
-def gen_label_mask(label_list, image_filepath, hek_time, label, save_path=None, do_plot=False):
+def gen_label_mask(label_list, image_filepath, hek_time, label, save_path=None, do_plot=False, jp2=None):
     """
     Create a binary mask of feature locations. If there is no feature, an empty mask is returned
 
@@ -376,6 +377,7 @@ def gen_label_mask(label_list, image_filepath, hek_time, label, save_path=None, 
     :param label: The event type being processed: either 'CH', 'AR' or 'SS'.
     :param save_path: directory of the mask files and optionally the figures.
     :param do_plot: True will plot figures and save them to save_path
+    :param jp2: whether we load and plot the jp2 image in the png preview, or not (none).
     :return: binary mask of feature and list of polygon vertices tuples.
     """
 
@@ -384,7 +386,16 @@ def gen_label_mask(label_list, image_filepath, hek_time, label, save_path=None, 
     mask_shape = (4096, 4096)
     jp2_shape = (jp2_header['NAXIS1'], jp2_header['NAXIS2'])
     mask = np.zeros(mask_shape, dtype=np.int)
-    dummy_array = np.empty(mask_shape, dtype=np.int)
+    if jp2 is None:
+        dummy_array = np.empty(mask_shape, dtype=np.int)
+    else:
+        # load jp2
+        imjp2 = glymur.Jp2k(jp2)
+        imdata = imjp2[:]
+        dummy_array = imdata[::-1]
+        print('Loading jp2...')
+
+
     verts_yx_list = []
     blank_hek_elems = []
 
@@ -392,6 +403,7 @@ def gen_label_mask(label_list, image_filepath, hek_time, label, save_path=None, 
         raise ValueError('Mask and WCS array shapes do not agree.')
 
     aia_map = Map(dummy_array, jp2_header)
+    aia_map.plot_settings['cmap'] = plt.get_cmap('sdoaia193')
 
     fig, ax = None, None
     if do_plot:
@@ -430,9 +442,9 @@ def gen_label_mask(label_list, image_filepath, hek_time, label, save_path=None, 
 
 
     if do_plot:
-        label_map = Map(mask, jp2_header)
-        label_map.plot(axes=ax)
-        label_map.draw_limb()
+        # label_map = Map(mask, jp2_header)
+        # label_map.plot(axes=ax)
+        # label_map.draw_limb()
         ax.set_title(label + ' @ hek_time: ' + hek_time.strftime('%Y/%m/%d %H:%M:%S'))
         # TODO: fix the tight_layout issue
         #plt.tight_layout()
