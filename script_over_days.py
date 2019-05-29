@@ -4,7 +4,7 @@ import logging
 
 if __name__ == '__main__':
 
-    save_dir = os.path.abspath('/Users/rattie/Data/Michael/MachineLearning/Hek_project/test_few_days')
+    save_dir = os.path.abspath(os.path.expanduser('~/Data/Michael/MachineLearning/Hek_project/test_few_days'))
 
     tstart = '2013/02/01 00:00:00'
     tend = '2013/02/01 23:30:00'
