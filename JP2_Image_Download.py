@@ -173,14 +173,14 @@ class Jp2ImageDownload:
         downloaded_events.sort()
 
 
-        with open(self.hek_time_jp2_map_csv, 'w') as csvFile:
+        with open(self.hek_time_jp2_map_csv, 'w', newline='') as csvFile:
             writer = csv.writer(csvFile)
             writer.writerows(downloaded_events)
         csvFile.close()
 
         # Only write the list of last missed downloads.
         if self.missed_downloads:
-            with open(self.missed_downloads_csv, 'w') as csvFile:
+            with open(self.missed_downloads_csv, 'w', newline='') as csvFile:
                 writer = csv.writer(csvFile)
                 for elem in self.missed_downloads:
                     writer.writerow([elem])
@@ -349,14 +349,14 @@ class Jp2ImageDownload:
                 self.blank_hek_events += ss_blanks
 
         # Write mask_time_map to a csv file
-        with open(self.mask_hek_time_map_csv, 'w') as csvFile:
+        with open(self.mask_hek_time_map_csv, 'w', newline='') as csvFile:
             writer = csv.writer(csvFile)
             writer.writerows(mask_time_map)
         csvFile.close()
 
         # Create the csv file that will contain the "blank" hek events, i.e, event that have a hek entry but no
         # hpc_boundcc coordinates
-        with open(self.blank_hek_events_csv, 'w') as outcsv:
+        with open(self.blank_hek_events_csv, 'w', newline='') as outcsv:
             writer = csv.writer(outcsv)
             writer.writerow(['frm_specificid', 'event_starttime'])
             writer.writerows(self.blank_hek_events)
