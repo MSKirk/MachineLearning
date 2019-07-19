@@ -8,6 +8,7 @@ from sunpy.io import read_file_header
 from sunpy.map import Map
 import astropy.units as u
 from astropy.coordinates import SkyCoord
+from astropy.table import vstack
 import glymur
 
 import numpy as np
@@ -213,12 +214,17 @@ class Jp2ImageDownload:
         image_times = []
         for measure in measurements:
             if measure is not 'continuum' and measure is not 'magnetogram':
-                kwargs = {'observatory': 'SDO', 'instrument': 'AIA', 'detector': 'AIA', 'measurement': measure}
+                #kwargs = {'observatory': 'SDO', 'instrument': 'AIA', 'detector': 'AIA', 'measurement': measure}
+                kwargs = {'observatory': 'SDO', 'instrument': 'AIA', 'measurement': measure}
             else:
-                kwargs = {'observatory': 'SDO', 'instrument': 'HMI', 'detector': 'HMI', 'measurement': measure}
+                #kwargs = {'observatory': 'SDO', 'instrument': 'HMI', 'detector': 'HMI', 'measurement': measure}
+                kwargs = {'observatory': 'SDO', 'instrument': 'HMI', 'measurement': measure}
 
-            requested_file_measurement = '{:s}_{:s}_{:s}_{:s}'.\
-                format(kwargs['observatory'], kwargs['instrument'], kwargs['detector'], measure)
+            #requested_file_measurement = '{:s}_{:s}_{:s}_{:s}'.\
+            #    format(kwargs['observatory'], kwargs['instrument'], kwargs['detector'], measure)
+
+            requested_file_measurement = '{:s}_{:s}_{:s}'. \
+                    format(kwargs['observatory'], kwargs['instrument'], measure)
 
             # Check how far requested time in metadata is from requested hek time
             metadata = hv.get_closest_image(hek_time, **kwargs)
@@ -476,7 +482,7 @@ def get_hek_result(time_start, time_end):
     times = list(set([elem["event_endtime"] for elem in results]))
 
     ss_results = client.search(hek.attrs.Time(time_start, time_end), hek.attrs.FRM.Name == 'EGSO_SFC')  # SS
-    results += ss_results
+    results = vstack(results, ss_results)
     times += list(set([elem["event_starttime"] for elem in ss_results]))
     times.sort()
     return results, times
