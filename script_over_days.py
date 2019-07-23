@@ -4,10 +4,10 @@ import logging
 
 if __name__ == '__main__':
 
-    save_dir = os.path.abspath(os.path.expanduser('~/Data/Michael/MachineLearning/Hek_project/test_few_days'))
+    save_dir = os.path.abspath(os.path.expanduser('/Users/mskirk/Desktop/MLDataTest/test'))
 
-    tstart = '2013/02/01 00:00:00'
-    tend = '2013/02/01 23:30:00'
+    tstart = '2011/06/25 00:00:00'
+    tend = '2011/06/25 23:30:00'
     j = Jpd.Jp2ImageDownload(save_dir, tstart=tstart, tend=tend)
     logging.basicConfig(format='%(asctime)s %(message)s', filename=os.path.join(j.save_dir, 'logger.log'), level=logging.INFO)
 

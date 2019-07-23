@@ -11,7 +11,7 @@ if __name__ == '__main__':
     # SET THESE PARAMETERS:
     save_dir = os.path.abspath('/Users/mskirk/Desktop/MLDataTest')
     #save_dir = os.path.abspath('/Volumes/RAPH_1TB/Data/Michael/Hek_project')
-    start_date = '2010/06/01 00:00:00'  # inclusive
+    start_date = '2012/01/01 00:00:00'  # inclusive
     end_date = '2019/07/01 00:00:00'  # not inclusive
 
     # SHOULDN'T NEED TO CHANGE ANYTHING BELOW THIS --------->>
