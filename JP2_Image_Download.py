@@ -22,6 +22,7 @@ from mahotas.polygon import fill_polygon
 import csv
 import urllib
 import logging
+import warnings
 
 logger = logging.getLogger(__name__)
 
@@ -441,8 +442,9 @@ def gen_label_mask(label_list, image_filepath, hek_time, label, save_path=None, 
             blank_hek_elems.append([labels['frm_specificid'], labels['event_starttime']])
     # In the very rare case where the HPC coordinates of all elements in the hek result are blank, raise that specifically to let us know.
     if len(blank_hek_elems) == len(label_list):
-        raise Exception('All elements at hek_time {:s} are blank for label {:s}'.format(hek_time.strftime(TIME_FORMAT), label))
-        # TODO: handle such error in a non-interruptive manner.
+        warnings.warn('All elements at hek_time {:s} are blank for label {:s}'.format(hek_time.strftime(TIME_FORMAT), label),
+                      UserWarning, stacklevel=2)
+        # handled error in a non-interruptive manner.
 
     mask_file_path = write_mask(mask, hek_time, label, save_path=save_path)
 

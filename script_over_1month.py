@@ -4,10 +4,10 @@ import logging
 
 if __name__ == '__main__':
 
-    save_dir = os.path.abspath('/Volumes/SolarData/LabledImages/empty_sets')
+    save_dir = os.path.abspath('/Users/mskirk/Desktop/MLDataTest')
 
     tstart = '2018/07/01 00:00:00'
-    tend = '2018/07/31 23:30:00'
+    tend = '2018/08/01 00:00:00'
     j = Jpd.Jp2ImageDownload(save_dir, tstart=tstart, tend=tend)
     logging.basicConfig(format='%(asctime)s %(message)s', filename=os.path.join(j.save_dir, 'logger.log'), level=logging.INFO)
 
