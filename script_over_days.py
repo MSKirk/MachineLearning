@@ -4,8 +4,8 @@ import logging
 
 if __name__ == '__main__':
 
-    save_dir = os.path.abspath(os.path.expanduser('/Users/mskirk/Desktop/MLDataTest/test'))
-
+    save_dir = os.path.abspath(os.path.expanduser('~/Data/ML_projects/aia_recognition'))
+    # DO NOT DOWNLOAD ANYTHING BEFORE 2010/12 (no HMI data in helioviewer)
     tstart = '2011/06/25 00:00:00'
     tend = '2011/06/25 23:30:00'
     j = Jpd.Jp2ImageDownload(save_dir, tstart=tstart, tend=tend)

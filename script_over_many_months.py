@@ -11,6 +11,8 @@ if __name__ == '__main__':
     # SET THESE PARAMETERS:
     save_dir = os.path.abspath('/Users/mskirk/Desktop/MLDataTest')
     #save_dir = os.path.abspath('/Volumes/RAPH_1TB/Data/Michael/Hek_project')
+
+    # DO NOT DOWNLOAD ANYTHING BEFORE 2010/12 (no HMI data in helioviewer)
     start_date = '2017/01/01 00:00:00'  # inclusive
     end_date = '2017/06/01 00:00:00'  # not inclusive
 
