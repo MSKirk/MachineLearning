@@ -23,18 +23,19 @@ def read_solar_jp2(filepath, verbose=False):
     img = sunpy.io.read_file(filepath, filetype='jp2')[0]
     prepped_header = img.header
 
-    # Rotation of image to Solar North
+    # Rotation of image to get vertical y-axis Top-to-Bottom parallel to Solar North-to-South axis.
     if img.header['CROTA2'] != 0:
         if verbose:
             print('Rotating image to solar north')
         prepped_data = calibration.scale_rotate(img.data, img.header['CROTA2'])
+        prepped_header['CROTA2'] = 0
 
         center = ((np.array(prepped_data.shape) - 1) / 2.0).astype(int)
         half_size = int(aia_image_size / 2)
-        prepped_data = prepped_data[center[1] - half_size:center[1] + half_size, center[0] - half_size:center[0] + half_size]
-        prepped_header['CROTA2'] = 0
+        prepped_data = prepped_data[center[1] - half_size:center[1] + half_size, center[0] - half_size:center[0] + half_size].astype(np.float64)
+
     else:
-        prepped_data = img.data
+        prepped_data = img.data.astype(np.float64)
 
     # Normalizing the image intensity to levels at the start of the mission for AIA
     if 'AIA' in img.header['INSTRUME']:
