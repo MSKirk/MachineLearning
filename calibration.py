@@ -16,11 +16,12 @@ def scale_rotate(image, angle=0, scale_factor=1, reference_pixel=None):
     """
     Perform scaled rotation with opencv. About 20 times faster than with Sunpy & scikit/skimage warp methods.
     The output is a padded image that holds the entire rescaled,rotated image, recentered around the reference pixel.
-    Positive-angle rotation will go counterclockwise if the array is displayed with the origin on top (default),
-    and clockwise with the origin at bottom.
+    Positive-angle rotation rotates image clockwise if the array origin (0,0) map to the bottom left of the image,
+    and counterclockwise if the array origin map to the top left of the image.
 
     :param image: Numpy 2D array
-    :param angle: rotation angle in degrees. Positive angle  will rotate counterclocwise if array origin on top-left
+    :param angle: rotation angle in degrees. Positive-angle rotation rotates image clockwise if the array origin (0,0)
+    map to the bottom left of the image, and counterclockwise if the array origin map to the top left of the image.
     :param scale_factor: ratio of the wavelength-dependent pixel scale over the target scale of 0.6 arcsec
     :param reference_pixel: tuple of (x, y) coordinate. Given as (x, y) = (col, row) and not (row, col).
     :return: padded scaled and rotated image
