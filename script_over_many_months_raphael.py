@@ -8,15 +8,19 @@ import logging
 
 if __name__ == '__main__':
 
-    # Update to your own case
-    save_dir = os.path.abspath('/Volumes/RAPH_1TB/Data/Michael/Hek_project')
-    start_date = '2018/05/01 00:00:00'  # inclusive
-    end_date = '2019/02/01 00:00:00'  # not inclusive
+    # SET THESE PARAMETERS:
+    save_dir = os.path.abspath('~/Data/ML_projects/HEK_project')
 
+    # DO NOT DOWNLOAD ANYTHING BEFORE 2010/12 (no HMI data in helioviewer)
+    start_date = '2017/01/01 00:00:00'  # inclusive
+    end_date = '2017/06/01 00:00:00'  # not inclusive
 
-    begin_list = [dt for dt in rrule(MONTHLY, dtstart=parse_time(start_date), until=parse_time(end_date))]
+    # SHOULDN'T NEED TO CHANGE ANYTHING BELOW THIS --------->>
+
+    begin_list = [dt for dt in rrule(MONTHLY, dtstart=parse_time(start_date).to_datetime(), until=parse_time(end_date).to_datetime())]
     end_list = [elem - datetime.timedelta(minutes=30) for elem in begin_list[1:]]
     del begin_list[-1]
+
 
     for tstart, tend in zip(begin_list, end_list):
 
@@ -45,5 +49,3 @@ if __name__ == '__main__':
                 print('HEK server error during make_labels(). Trying again...')
                 logging.warning('HEK server error raised ConnectionResetError during make_labels()')
                 continue
-
-

@@ -5,11 +5,10 @@ Maintained at https://github.com/MSKirk/MachineLearning/blob/master/script_aggre
 (1) Merges the content of the csv files found in all YEAR_MONTH subdirectories into a single global_csv_file.
 This file will map all jp2 to their labels without any overlaps. This csv only map file basenames.
 
-(2) This script also creates csv files mapping relative YEAR_MONTH-based file path to new common jp2 and labels directory
-directly under a new  parent directory. You may this e.g. for moving the files into a new more "global" tree.
+(2) This script also creates csv files mapping relative YEAR_MONTH-based file path to new common jp2 and labels
+directly under a new  parent directory. You may run this e.g. for moving the files into a new more "global" tree.
 
-E.g: given a parent directory "parent_dir" hosting the original data tree (parent_dir),
-the csv file will map everything in
+E.g: given a parent directory "parent_dir", the csv file will map things from
 
 parent_dir
     2010_12
@@ -47,16 +46,20 @@ import os
 import glob
 import pandas as pd
 import csv
+from pathlib import Path
 
 
 #############   Set some data directories - update to your personal case  #############
 
 # Parent directory of all YEAR_MONTH subdirectories that will also contain the global csv file
-parent_dir = '/Volumes/SolarData/LabeledImages/'
+parent_dir = '/media/raphael/SolarData/V2'
 # Common directory where all files will be moved, without duplicates.
 parent_dir2 = parent_dir
 # Filename of csv file that will be the aggregation all csv files of all YEAR_MONTH subdirectories without duplicates
-global_csv_file = os.path.join(parent_dir, 'label_jp2_map_global.csv')
+global_csv_file = os.path.join(parent_dir2, 'label_jp2_map_global.csv')
+# csv output for empty data
+csv_empty_data = os.path.join(parent_dir2, 'empty_data.csv')
+
 
 ######### (1) Creating the aggregated map of jp2 and label masks ###########
 
@@ -64,9 +67,22 @@ global_csv_file = os.path.join(parent_dir, 'label_jp2_map_global.csv')
 csv_files = sorted(glob.glob(os.path.join(parent_dir, '20*/label_jp2_map.csv')))
 # Read their content and concatenate in a unique dataframe
 dfs = []
+empty_csvs = []
 for csvf in csv_files:
     print(csvf)
-    dfs.append(pd.read_csv(csvf, header=None))
+    try:
+        # Sometimes the CSV file can be empty if no complete set exist at all
+        dfs.append(pd.read_csv(csvf, header=None))
+    except pd.errors.EmptyDataError:
+        print('Empty csv file')
+        # Write to file the parent directory of the empty data
+        empty_csvs.append([Path(csvf).parent.name])
+        continue
+
+with open(csv_empty_data, 'w') as csvFile:
+    writer = csv.writer(csvFile)
+    writer.writerows(empty_csvs)
+csvFile.close()
 
 # Concatenate the dataframes into a single one while dropping all duplicates
 label_jp2_map_global = pd.concat(dfs).drop_duplicates().reset_index(drop=True)
@@ -96,7 +112,7 @@ labels_list = []
 jp2f_csv = os.path.join(parent_dir2, 'map_non_duplicated_jp2_paths.csv')
 labels_csv = os.path.join(parent_dir2, 'map_non_duplicated_labels_paths.csv')
 
-# Map the jp2 files
+# Map the jp2 files of each sub-directories into a single list
 new_files = []
 for file in jp2f:
     new_file = os.path.join(jp2_dir, os.path.basename(file))
@@ -108,7 +124,7 @@ for file in jp2f:
         jp2f_list.append([original_file_relative, new_file_relative])
         new_files.append(new_file)
 
-# Write the csv file mapping the jp2 YEAR_MONTH-based path to new common directory
+# Write the csv file mapping the jp2 YEAR_MONTH-based path to a new single directory
 with open(jp2f_csv, 'w') as csvFile:
     writer = csv.writer(csvFile)
     writer.writerows(jp2f_list)
@@ -129,7 +145,7 @@ for file in labels:
         labels_list.append([original_file_relative, new_file_relative])
         new_files.append(new_file)
 
-# Create the restore csv of .npz files (including png files) mapping the .npz and png YEAR_MONTH-based path to new common directory
+# Create the csv mapping the .npz and png YEAR_MONTH-based path to new common directory
 with open(labels_csv, 'w') as csvFile:
     writer = csv.writer(csvFile)
     writer.writerows(labels_list)
