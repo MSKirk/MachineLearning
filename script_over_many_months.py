@@ -9,14 +9,14 @@ import logging
 if __name__ == '__main__':
 
     # SET THESE PARAMETERS:
-    save_dir = os.path.abspath('/Volumes/SolarData/LabledImages')
+    save_dir = os.path.abspath('/Users/mskirk/Desktop/MLDataTest')
     #save_dir = os.path.abspath('/Volumes/RAPH_1TB/Data/Michael/Hek_project')
-    start_date = '2010/06/01 00:00:00'  # inclusive
-    end_date = '2013/06/01 00:00:00'  # not inclusive
+    start_date = '2017/01/01 00:00:00'  # inclusive
+    end_date = '2017/06/01 00:00:00'  # not inclusive
 
     # SHOULDN'T NEED TO CHANGE ANYTHING BELOW THIS --------->>
 
-    begin_list = [dt for dt in rrule(MONTHLY, dtstart=parse_time(start_date), until=parse_time(end_date))]
+    begin_list = [dt for dt in rrule(MONTHLY, dtstart=parse_time(start_date).to_datetime(), until=parse_time(end_date).to_datetime())]
     end_list = [elem - datetime.timedelta(minutes=30) for elem in begin_list[1:]]
     del begin_list[-1]
 

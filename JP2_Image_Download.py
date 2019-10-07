@@ -8,6 +8,7 @@ from sunpy.io import read_file_header
 from sunpy.map import Map
 import astropy.units as u
 from astropy.coordinates import SkyCoord
+from astropy.table import vstack
 import glymur
 
 import numpy as np
@@ -21,6 +22,7 @@ from mahotas.polygon import fill_polygon
 import csv
 import urllib
 import logging
+import warnings
 
 logger = logging.getLogger(__name__)
 
@@ -213,12 +215,17 @@ class Jp2ImageDownload:
         image_times = []
         for measure in measurements:
             if measure is not 'continuum' and measure is not 'magnetogram':
-                kwargs = {'observatory': 'SDO', 'instrument': 'AIA', 'detector': 'AIA', 'measurement': measure}
+                #kwargs = {'observatory': 'SDO', 'instrument': 'AIA', 'detector': 'AIA', 'measurement': measure}
+                kwargs = {'observatory': 'SDO', 'instrument': 'AIA', 'measurement': measure}
             else:
-                kwargs = {'observatory': 'SDO', 'instrument': 'HMI', 'detector': 'HMI', 'measurement': measure}
+                #kwargs = {'observatory': 'SDO', 'instrument': 'HMI', 'detector': 'HMI', 'measurement': measure}
+                kwargs = {'observatory': 'SDO', 'instrument': 'HMI', 'measurement': measure}
 
-            requested_file_measurement = '{:s}_{:s}_{:s}_{:s}'.\
-                format(kwargs['observatory'], kwargs['instrument'], kwargs['detector'], measure)
+            #requested_file_measurement = '{:s}_{:s}_{:s}_{:s}'.\
+            #    format(kwargs['observatory'], kwargs['instrument'], kwargs['detector'], measure)
+
+            requested_file_measurement = '{:s}_{:s}_{:s}'. \
+                    format(kwargs['observatory'], kwargs['instrument'], measure)
 
             # Check how far requested time in metadata is from requested hek time
             metadata = hv.get_closest_image(hek_time, **kwargs)
@@ -435,8 +442,9 @@ def gen_label_mask(label_list, image_filepath, hek_time, label, save_path=None, 
             blank_hek_elems.append([labels['frm_specificid'], labels['event_starttime']])
     # In the very rare case where the HPC coordinates of all elements in the hek result are blank, raise that specifically to let us know.
     if len(blank_hek_elems) == len(label_list):
-        raise Exception('All elements at hek_time {:s} are blank for label {:s}'.format(hek_time.strftime(TIME_FORMAT), label))
-        # TODO: handle such error in a non-interruptive manner.
+        warnings.warn('All elements at hek_time {:s} are blank for label {:s}'.format(hek_time.strftime(TIME_FORMAT), label),
+                      UserWarning, stacklevel=2)
+        # handled error in a non-interruptive manner.
 
     mask_file_path = write_mask(mask, hek_time, label, save_path=save_path)
 
@@ -476,7 +484,7 @@ def get_hek_result(time_start, time_end):
     times = list(set([elem["event_endtime"] for elem in results]))
 
     ss_results = client.search(hek.attrs.Time(time_start, time_end), hek.attrs.FRM.Name == 'EGSO_SFC')  # SS
-    results += ss_results
+    results = vstack(results, ss_results)
     times += list(set([elem["event_starttime"] for elem in ss_results]))
     times.sort()
     return results, times
